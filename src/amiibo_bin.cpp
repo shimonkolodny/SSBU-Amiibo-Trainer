@@ -4,12 +4,12 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 
 namespace ssbu {
 
 namespace {
 
-// Exact 50-level XP thresholds from MiDe's SSBU Amiibo Bin Guide (0x14C-0x14D)
 constexpr uint16_t kLevelXpTable[50] = {
     0,    8,    22,   41,   63,   90,   120,  155,  195,  238,
     284,  330,  376,  426,  476,  528,  580,  632,  684,  737,
@@ -18,12 +18,13 @@ constexpr uint16_t kLevelXpTable[50] = {
     2220, 2329, 2459, 2619, 2799, 2999, 3209, 3429, 3669, 3912
 };
 
-// Exact 9-level hidden CPU XP thresholds (0x14E-0x14F)
 constexpr uint16_t kCpuXpTable[9] = {
     0, 63, 210, 434, 749, 1141, 1603, 2065, 2765
 };
 
-// Portable SHA-256 + HMAC-SHA256 + keystream helper for NTAG215 signature/appdata integrity
+// ---------------------------------------------------------------------------
+// Portable SHA-256 & HMAC-SHA256
+// ---------------------------------------------------------------------------
 struct Sha256Ctx {
     uint32_t state[8];
     uint64_t bitlen;
@@ -132,6 +133,209 @@ static void HmacSha256(const uint8_t* key, size_t key_len,
     Sha256Compute(outer, sizeof(outer), out);
 }
 
+// ---------------------------------------------------------------------------
+// Portable AES-128 & AES-128-CTR (for nfc3d_amiibo_cipher)
+// ---------------------------------------------------------------------------
+static const uint8_t kAesSbox[256] = {
+  0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
+  0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
+  0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
+  0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
+  0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
+  0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
+  0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
+  0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
+  0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
+  0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
+  0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+  0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
+  0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
+  0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
+  0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
+  0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
+};
+
+static const uint8_t kAesRcon[11] = {
+    0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
+};
+
+static inline uint8_t AesXtime(uint8_t x) { return static_cast<uint8_t>((x << 1) ^ (((x >> 7) & 1) * 0x1b)); }
+
+static void Aes128ExpandKey(const uint8_t key[16], uint8_t round_keys[176]) {
+    std::memcpy(round_keys, key, 16);
+    uint8_t temp[4];
+    for (int i = 4; i < 44; ++i) {
+        for (int j = 0; j < 4; ++j) temp[j] = round_keys[(i - 1) * 4 + j];
+        if (i % 4 == 0) {
+            uint8_t k = temp[0];
+            temp[0] = kAesSbox[temp[1]] ^ kAesRcon[i / 4];
+            temp[1] = kAesSbox[temp[2]];
+            temp[2] = kAesSbox[temp[3]];
+            temp[3] = kAesSbox[k];
+        }
+        for (int j = 0; j < 4; ++j) {
+            round_keys[i * 4 + j] = round_keys[(i - 4) * 4 + j] ^ temp[j];
+        }
+    }
+}
+
+static void Aes128EncryptBlock(const uint8_t round_keys[176], const uint8_t in[16], uint8_t out[16]) {
+    uint8_t s[16];
+    std::memcpy(s, in, 16);
+    for (int i = 0; i < 16; ++i) s[i] ^= round_keys[i];
+    for (int round = 1; round <= 10; ++round) {
+        for (int i = 0; i < 16; ++i) s[i] = kAesSbox[s[i]];
+        // ShiftRows
+        uint8_t t = s[1]; s[1]=s[5]; s[5]=s[9]; s[9]=s[13]; s[13]=t;
+        t = s[2]; s[2]=s[10]; s[10]=t; t = s[6]; s[6]=s[14]; s[14]=t;
+        t = s[15]; s[15]=s[11]; s[11]=s[7]; s[7]=s[3]; s[3]=t;
+        if (round < 10) {
+            for (int c = 0; c < 4; ++c) {
+                int idx = c * 4;
+                uint8_t a0 = s[idx], a1 = s[idx+1], a2 = s[idx+2], a3 = s[idx+3];
+                uint8_t all = a0 ^ a1 ^ a2 ^ a3;
+                s[idx+0] ^= all ^ AesXtime(a0 ^ a1);
+                s[idx+1] ^= all ^ AesXtime(a1 ^ a2);
+                s[idx+2] ^= all ^ AesXtime(a2 ^ a3);
+                s[idx+3] ^= all ^ AesXtime(a3 ^ a0);
+            }
+        }
+        for (int i = 0; i < 16; ++i) s[i] ^= round_keys[round * 16 + i];
+    }
+    std::memcpy(out, s, 16);
+}
+
+static void Aes128CtrCrypt(const uint8_t aes_key[16], const uint8_t aes_iv[16],
+                           const uint8_t* in, uint8_t* out, size_t len) {
+    uint8_t round_keys[176];
+    Aes128ExpandKey(aes_key, round_keys);
+    uint8_t counter[16];
+    std::memcpy(counter, aes_iv, 16);
+    uint8_t stream[16];
+    for (size_t offset = 0; offset < len; offset += 16) {
+        Aes128EncryptBlock(round_keys, counter, stream);
+        size_t chunk = std::min<size_t>(16, len - offset);
+        for (size_t i = 0; i < chunk; ++i) {
+            out[offset + i] = in[offset + i] ^ stream[i];
+        }
+        for (int k = 15; k >= 0; --k) {
+            if (++counter[k] != 0) break;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// nfc3d Key Derivation & Unpack/Pack (from socram8888/amiitool & Thenaya)
+// ---------------------------------------------------------------------------
+#pragma pack(push, 1)
+struct Nfc3dMasterKey {
+    uint8_t hmacKey[16];
+    char    typeString[14];
+    uint8_t rfu;
+    uint8_t magicBytesSize;
+    uint8_t magicBytes[16];
+    uint8_t xorPad[32];
+};
+
+struct Nfc3dAmiiboKeys {
+    Nfc3dMasterKey data;
+    Nfc3dMasterKey tag;
+};
+
+struct Nfc3dDerivedKeys {
+    uint8_t aesKey[16];
+    uint8_t aesIV[16];
+    uint8_t hmacKey[16];
+};
+#pragma pack(pop)
+
+static void Nfc3dCalcSeed(const uint8_t* internal_dump, uint8_t seed[64]) {
+    std::memcpy(seed + 0x00, internal_dump + 0x029, 0x02);
+    std::memset(seed + 0x02, 0x00, 0x0E);
+    std::memcpy(seed + 0x10, internal_dump + 0x1D4, 0x08);
+    std::memcpy(seed + 0x18, internal_dump + 0x1D4, 0x08);
+    std::memcpy(seed + 0x20, internal_dump + 0x1E8, 0x20);
+}
+
+static void Nfc3dKeygen(const Nfc3dMasterKey& base, const uint8_t* internal_dump, Nfc3dDerivedKeys* derived) {
+    uint8_t baseSeed[64]{};
+    Nfc3dCalcSeed(internal_dump, baseSeed);
+
+    uint8_t prepared[128]{};
+    size_t pos = 0;
+    for (size_t i = 0; i < sizeof(base.typeString); ++i) {
+        prepared[pos++] = static_cast<uint8_t>(base.typeString[i]);
+        if (base.typeString[i] == '\0') break;
+    }
+    size_t magic_sz = std::min<size_t>(16, base.magicBytesSize);
+    size_t leading  = 16 - magic_sz;
+    std::memcpy(prepared + pos, baseSeed, leading);
+    pos += leading;
+    std::memcpy(prepared + pos, base.magicBytes, magic_sz);
+    pos += magic_sz;
+    std::memcpy(prepared + pos, baseSeed + 0x10, 16);
+    pos += 16;
+    for (size_t i = 0; i < 32; ++i) {
+        prepared[pos++] = baseSeed[i + 32] ^ base.xorPad[i];
+    }
+
+    uint8_t* out_bytes = reinterpret_cast<uint8_t*>(derived);
+    size_t remaining = sizeof(Nfc3dDerivedKeys);
+    uint16_t iteration = 0;
+    while (remaining > 0) {
+        std::vector<uint8_t> drbg_in(2 + pos);
+        drbg_in[0] = static_cast<uint8_t>((iteration >> 8) & 0xFF);
+        drbg_in[1] = static_cast<uint8_t>(iteration & 0xFF);
+        std::memcpy(drbg_in.data() + 2, prepared, pos);
+        uint8_t digest[32]{};
+        HmacSha256(base.hmacKey, sizeof(base.hmacKey), drbg_in.data(), drbg_in.size(), digest);
+        size_t take = std::min<size_t>(32, remaining);
+        std::memcpy(out_bytes, digest, take);
+        out_bytes += take;
+        remaining -= take;
+        ++iteration;
+    }
+}
+
+static bool Nfc3dUnpack(const Nfc3dAmiiboKeys& keys, const uint8_t* tag540, uint8_t* plain540) {
+    std::memcpy(plain540, tag540, kStandardAmiiboSize);
+    uint8_t internal[kStandardAmiiboSize]{};
+    AmiiboBin::TagToInternal(tag540, internal);
+
+    Nfc3dDerivedKeys dataKeys{}, tagKeys{};
+    Nfc3dKeygen(keys.data, internal, &dataKeys);
+    Nfc3dKeygen(keys.tag, internal, &tagKeys);
+
+    std::memcpy(plain540, internal, kStandardAmiiboSize);
+    Aes128CtrCrypt(dataKeys.aesKey, dataKeys.aesIV, internal + 0x02C, plain540 + 0x02C, 0x188);
+
+    HmacSha256(tagKeys.hmacKey, sizeof(tagKeys.hmacKey), plain540 + 0x1D4, 0x34, plain540 + 0x1B4);
+    HmacSha256(dataKeys.hmacKey, sizeof(dataKeys.hmacKey), plain540 + 0x029, 0x1DF, plain540 + 0x008);
+
+    return std::memcmp(plain540 + 0x1B4, internal + 0x1B4, 32) == 0;
+}
+
+static void Nfc3dPack(const Nfc3dAmiiboKeys& keys, const uint8_t* plain540, uint8_t* tag540) {
+    uint8_t cipher[kStandardAmiiboSize]{};
+    std::memcpy(cipher, plain540, kStandardAmiiboSize);
+
+    Nfc3dDerivedKeys tagKeys{}, dataKeys{};
+    Nfc3dKeygen(keys.tag, plain540, &tagKeys);
+    Nfc3dKeygen(keys.data, plain540, &dataKeys);
+
+    HmacSha256(tagKeys.hmacKey, sizeof(tagKeys.hmacKey), plain540 + 0x1D4, 0x34, cipher + 0x1B4);
+
+    // Data HMAC over plain[0x029..0x1B3] (0x18B) + cipher[0x1B4..0x1D3] (0x20) + plain[0x1D4..0x207] (0x34)
+    uint8_t data_hmac_input[0x18B + 0x20 + 0x34]{};
+    std::memcpy(data_hmac_input, plain540 + 0x029, 0x18B);
+    std::memcpy(data_hmac_input + 0x18B, cipher + 0x1B4, 0x20);
+    std::memcpy(data_hmac_input + 0x18B + 0x20, plain540 + 0x1D4, 0x34);
+    HmacSha256(dataKeys.hmacKey, sizeof(dataKeys.hmacKey), data_hmac_input, sizeof(data_hmac_input), cipher + 0x008);
+
+    Aes128CtrCrypt(dataKeys.aesKey, dataKeys.aesIV, plain540 + 0x02C, cipher + 0x02C, 0x188);
+    AmiiboBin::InternalToTag(cipher, tag540);
+}
+
 } // namespace
 
 float AmiiboBehaviorParams::ImplicitJabPercent() const {
@@ -146,11 +350,19 @@ float AmiiboBehaviorParams::ImplicitNairPercent() const {
     return std::max(0.0f, 100.0f - s);
 }
 
+float AmiiboBehaviorParams::ImplicitNeutralAirDodgePercent() const {
+    return std::max(0.0f, 100.0f - (escape_air_forward + escape_air_backward));
+}
+
+float AmiiboBehaviorParams::ImplicitSideTauntPercent() const {
+    return std::max(0.0f, 100.0f - (appeal_hi + appeal_lw));
+}
+
 void AmiiboBehaviorParams::NormalizeMoveSums() {
     float g_sum = ftilt + utilt + dtilt + fsmash + usmash + dsmash +
                   nspecial + sspecial + uspecial + dspecial;
     if (g_sum > 95.0f && g_sum > 0.0f) {
-        float scale = 92.0f / g_sum; // Leave ~8% for implicit Jab
+        float scale = 92.0f / g_sum;
         ftilt *= scale; utilt *= scale; dtilt *= scale;
         fsmash *= scale; usmash *= scale; dsmash *= scale;
         nspecial *= scale; sspecial *= scale; uspecial *= scale; dspecial *= scale;
@@ -158,33 +370,96 @@ void AmiiboBehaviorParams::NormalizeMoveSums() {
     float a_sum = fair + bair + uair + dair +
                   air_nspecial + air_sspecial + air_uspecial + air_dspecial;
     if (a_sum > 92.0f && a_sum > 0.0f) {
-        float scale = 86.0f / a_sum; // Leave ~14% for implicit Nair
+        float scale = 86.0f / a_sum;
         fair *= scale; bair *= scale; uair *= scale; dair *= scale;
         air_nspecial *= scale; air_sspecial *= scale; air_uspecial *= scale; air_dspecial *= scale;
     }
+    if (escape_air_forward + escape_air_backward > 95.0f) {
+        float s = 80.0f / (escape_air_forward + escape_air_backward);
+        escape_air_forward *= s;
+        escape_air_backward *= s;
+    }
+    if (appeal_hi + appeal_lw > 95.0f) {
+        float s = 80.0f / (appeal_hi + appeal_lw);
+        appeal_hi *= s;
+        appeal_lw *= s;
+    }
+}
+
+void AmiiboBin::TagToInternal(const uint8_t* tag, uint8_t* intl) {
+    std::memcpy(intl, tag, kStandardAmiiboSize);
+    std::memcpy(intl + 0x000, tag + 0x008, 0x008);
+    std::memcpy(intl + 0x008, tag + 0x080, 0x020);
+    std::memcpy(intl + 0x028, tag + 0x010, 0x024);
+    std::memcpy(intl + 0x04C, tag + 0x0A0, 0x168);
+    std::memcpy(intl + 0x1B4, tag + 0x034, 0x020);
+    std::memcpy(intl + 0x1D4, tag + 0x000, 0x008);
+    std::memcpy(intl + 0x1DC, tag + 0x054, 0x02C);
+}
+
+void AmiiboBin::InternalToTag(const uint8_t* intl, uint8_t* tag) {
+    std::memcpy(tag, intl, kStandardAmiiboSize);
+    std::memcpy(tag + 0x008, intl + 0x000, 0x008);
+    std::memcpy(tag + 0x080, intl + 0x008, 0x020);
+    std::memcpy(tag + 0x010, intl + 0x028, 0x024);
+    std::memcpy(tag + 0x0A0, intl + 0x04C, 0x168);
+    std::memcpy(tag + 0x034, intl + 0x1B4, 0x020);
+    std::memcpy(tag + 0x000, intl + 0x1D4, 0x008);
+    std::memcpy(tag + 0x054, intl + 0x1DC, 0x02C);
 }
 
 AmiiboBin::AmiiboBin() {
+    TryAutoLoadRetailKey();
     InitializeBlankFighter(0x0000, 0);
+}
+
+bool AmiiboBin::TryAutoLoadRetailKey() {
+    if (has_retail_key_) return true;
+    const char* candidates[] = {
+        "key_retail.bin",
+        "resources/key_retail.bin",
+        "../key_retail.bin"
+    };
+    for (const char* path : candidates) {
+        if (LoadRetailKey(path, nullptr)) return true;
+    }
+    return false;
 }
 
 void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
     data_.assign(kStandardAmiiboSize, 0);
-    // Standard NTAG215 header bytes & capability container
-    data_[0x00] = 0x04;
-    data_[0x01] = 0xA1;
-    data_[0x02] = 0xB2;
-    data_[0x03] = 0xC3;
-    data_[0x10] = 0xE1;
-    data_[0x11] = 0x10;
-    data_[0x12] = 0x3E;
-    data_[0x13] = 0x00;
+    was_loaded_encrypted_ = false;
+    loaded_as_tag_layout_ = false;
 
-    // Set SSBU App Access ID (0x34F80200) at 0xB6..0xB9
-    data_[0xB6] = 0x34;
-    data_[0xB7] = 0xF8;
-    data_[0xB8] = 0x02;
-    data_[0xB9] = 0x00;
+    // UID in Internal layout (0x1D4..0x1DB) and NTAG215 trailer (0x208..0x21B)
+    data_[0x1D4] = 0x04;
+    data_[0x1D5] = 0xA1;
+    data_[0x1D6] = 0xB2;
+    data_[0x1D7] = 0xC3;
+    data_[0x1D8] = 0xD4;
+    data_[0x1D9] = 0xE5;
+    data_[0x1DA] = 0xF6;
+    data_[0x1DB] = 0x88;
+
+    // Flags (0x02C = 0x30: initialized + appdata present)
+    data_[0x02C] = 0x30;
+
+    // SSBU App Access ID (0x34F80200) at 0x0B6..0x0B9 in Internal Format
+    data_[0x0B6] = 0x34;
+    data_[0x0B7] = 0xF8;
+    data_[0x0B8] = 0x02;
+    data_[0x0B9] = 0x00;
+
+    // NTAG215 lock/CFG footer bytes at 0x208..0x213
+    data_[0x208] = 0x01;
+    data_[0x209] = 0x00;
+    data_[0x20A] = 0x0F;
+    data_[0x20B] = 0xBD;
+    data_[0x20C] = 0x00;
+    data_[0x20D] = 0x00;
+    data_[0x20E] = 0x00;
+    data_[0x20F] = 0x04;
+    data_[0x210] = 0x5F;
 
     SetCharacterId(char_id);
     SetLearningEnabled(true);
@@ -201,16 +476,17 @@ void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
 }
 
 bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
+    TryAutoLoadRetailKey();
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f) {
         if (error_out) *error_out = "Could not open file: " + path;
         return false;
     }
     auto sz = f.tellg();
-    if (sz != 540 && sz != 532 && sz != 572) {
+    if (sz != 540 && sz != 532 && sz != 520 && sz != 572) {
         if (error_out) {
             std::ostringstream oss;
-            oss << "Invalid Amiibo .bin size (" << sz << " bytes). Expected 540, 532, or 572 bytes.";
+            oss << "Invalid Amiibo .bin size (" << sz << " bytes). Expected 540, 532, 520, or 572 bytes.";
             *error_out = oss.str();
         }
         return false;
@@ -226,18 +502,78 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
     } else if (buf.size() > kStandardAmiiboSize) {
         buf.resize(kStandardAmiiboSize);
     }
-    data_ = std::move(buf);
+
+    // 1. Check if already in Plain/Internal format (SSBU AppID 0x34F80200 at 0x0B6..0x0B9)
+    bool plain_appid = (buf[0x0B6] == 0x34 && buf[0x0B7] == 0xF8 && buf[0x0B8] == 0x02 && buf[0x0B9] == 0x00);
+    if (plain_appid) {
+        data_ = std::move(buf);
+        // Ensure both 0x1DC and 0x054 have consistent Character ID
+        uint16_t cid_intl = (static_cast<uint16_t>(data_[0x1DC]) << 8) | data_[0x1DD];
+        uint16_t cid_tag  = (static_cast<uint16_t>(data_[0x054]) << 8) | data_[0x055];
+        if (cid_intl == 0 && cid_tag != 0) SetCharacterId(cid_tag);
+        else SetCharacterId(cid_intl);
+        was_loaded_encrypted_ = false;
+        loaded_as_tag_layout_ = false;
+        return true;
+    }
+
+    // 2. If we have key_retail.bin (160 bytes), attempt full nfc3d_amiibo_unpack decryption
+    if (has_retail_key_ && retail_key_.size() == sizeof(Nfc3dAmiiboKeys)) {
+        Nfc3dAmiiboKeys keys{};
+        std::memcpy(&keys, retail_key_.data(), sizeof(keys));
+        std::vector<uint8_t> unpacked(kStandardAmiiboSize, 0);
+        bool hmac_ok = Nfc3dUnpack(keys, buf.data(), unpacked.data());
+        bool unpacked_ssbu = (unpacked[0x0B6] == 0x34 && unpacked[0x0B7] == 0xF8);
+        if (hmac_ok || unpacked_ssbu) {
+            data_ = std::move(unpacked);
+            uint16_t cid = (static_cast<uint16_t>(data_[0x1DC]) << 8) | data_[0x1DD];
+            SetCharacterId(cid);
+            was_loaded_encrypted_ = true;
+            loaded_as_tag_layout_ = true;
+            return true;
+        }
+    }
+
+    // 3. Fallback: Convert from Tag layout to Internal layout and initialize SSBU AppData if encrypted without keys
+    std::vector<uint8_t> intl(kStandardAmiiboSize, 0);
+    TagToInternal(buf.data(), intl.data());
+    bool unenc_tag_ssbu = (intl[0x0B6] == 0x34 && intl[0x0B7] == 0xF8 && intl[0x0B8] == 0x02 && intl[0x0B9] == 0x00);
+    if (unenc_tag_ssbu) {
+        data_ = std::move(intl);
+        uint16_t cid = (static_cast<uint16_t>(data_[0x1DC]) << 8) | data_[0x1DD];
+        SetCharacterId(cid);
+        was_loaded_encrypted_ = false;
+        loaded_as_tag_layout_ = true;
+        return true;
+    }
+
+    // Encrypted NTAG215 dump loaded without key_retail.bin: preserve UID and Model Info (Character ID at tag 0x54..0x55)
+    uint16_t tag_char_id = (static_cast<uint16_t>(buf[0x054]) << 8) | buf[0x055];
+    InitializeBlankFighter(tag_char_id, 0);
+    std::memcpy(data_.data() + 0x1D4, buf.data() + 0x000, 8);
+    std::memcpy(data_.data() + 0x1DC, buf.data() + 0x054, 0x2C);
+    SetCharacterId(tag_char_id);
+    loaded_as_tag_layout_ = true;
     return true;
 }
 
 bool AmiiboBin::SaveToFile(const std::string& path, std::string* error_out) {
     UpdateChecksumsAndCrypto();
+    std::vector<uint8_t> out_bytes = data_;
+
+    // If retail key is available, pack and encrypt into NTAG215 Tag Format
+    if (has_retail_key_ && retail_key_.size() == sizeof(Nfc3dAmiiboKeys)) {
+        Nfc3dAmiiboKeys keys{};
+        std::memcpy(&keys, retail_key_.data(), sizeof(keys));
+        Nfc3dPack(keys, data_.data(), out_bytes.data());
+    }
+
     std::ofstream f(path, std::ios::binary | std::ios::trunc);
     if (!f) {
         if (error_out) *error_out = "Could not open output file for writing: " + path;
         return false;
     }
-    f.write(reinterpret_cast<const char*>(data_.data()), static_cast<std::streamsize>(data_.size()));
+    f.write(reinterpret_cast<const char*>(out_bytes.data()), static_cast<std::streamsize>(out_bytes.size()));
     if (!f.good()) {
         if (error_out) *error_out = "Failed while writing output .bin file.";
         return false;
@@ -252,31 +588,42 @@ bool AmiiboBin::LoadRetailKey(const std::string& key_path, std::string* error_ou
         return false;
     }
     auto sz = f.tellg();
-    if (sz != 160 && sz != 80) {
+    if (sz != 160) {
         if (error_out) *error_out = "Invalid key file size (expected 160-byte key_retail.bin).";
         return false;
     }
     f.seekg(0, std::ios::beg);
-    retail_key_.resize(static_cast<size_t>(sz));
-    f.read(reinterpret_cast<char*>(retail_key_.data()), sz);
+    retail_key_.resize(160);
+    f.read(reinterpret_cast<char*>(retail_key_.data()), 160);
     has_retail_key_ = true;
     return true;
 }
 
 void AmiiboBin::SetRetailKeyBytes(const std::vector<uint8_t>& key_bytes) {
     retail_key_ = key_bytes;
-    has_retail_key_ = !retail_key_.empty();
+    has_retail_key_ = (retail_key_.size() == 160);
+}
+
+std::string AmiiboBin::GetFormatStatusString() const {
+    std::ostringstream oss;
+    oss << "540B NTAG215 ("
+        << (was_loaded_encrypted_ ? "AES-128-CTR Encrypted Tag" : "Unpacked Plain/Tag Compatible")
+        << " | key_retail.bin: " << (has_retail_key_ ? "Loaded" : "Not Loaded") << ")";
+    return oss.str();
 }
 
 uint16_t AmiiboBin::GetCharacterId() const {
-    return (static_cast<uint16_t>(data_[0x54]) << 8) | data_[0x55];
+    uint16_t cid_intl = (static_cast<uint16_t>(data_[0x1DC]) << 8) | data_[0x1DD];
+    if (cid_intl != 0) return cid_intl;
+    return (static_cast<uint16_t>(data_[0x054]) << 8) | data_[0x055];
 }
 
 void AmiiboBin::SetCharacterId(uint16_t char_id) {
-    data_[0x54] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
-    data_[0x55] = static_cast<uint8_t>(char_id & 0xFF);
-    data_[0x58] = 0x00; // Figure type
-    data_[0x5A] = 0x00; // SSBU series
+    // Store in both Internal offset (0x1DC..0x1DD) and Tag offset (0x054..0x055) for universal compatibility
+    data_[0x1DC] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
+    data_[0x1DD] = static_cast<uint8_t>(char_id & 0xFF);
+    data_[0x054] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
+    data_[0x055] = static_cast<uint8_t>(char_id & 0xFF);
 }
 
 bool AmiiboBin::GetLearningEnabled() const {
@@ -362,7 +709,6 @@ SpiritType AmiiboBin::GetSpiritType() const {
 
 void AmiiboBin::SetSpiritType(SpiritType type) {
     data_[0xE3] = (data_[0xE3] & ~0x03) | (static_cast<uint8_t>(type) & 0x03);
-    // Update Type Affinities at 0x1A4-0x1A7
     int8_t neutral_aff = 0, atk_aff = 0, def_aff = 0, grab_aff = 0;
     switch (type) {
         case SpiritType::Neutral: neutral_aff = 60; break;
@@ -410,6 +756,25 @@ std::array<uint8_t, 3> AmiiboBin::GetSpiritSlots() const {
     return {data_[0xEC], data_[0xED], data_[0xEE]};
 }
 
+std::array<uint8_t, 3> AmiiboBin::GetLogicalSpiritList() const {
+    std::array<uint8_t, 3> out{0, 0, 0};
+    size_t idx = 0;
+    for (uint8_t b : GetSpiritSlots()) {
+        if (b != 0 && idx < 3) out[idx++] = b;
+    }
+    return out;
+}
+
+int AmiiboBin::GetTotalSpiritSlotCost() const {
+    int cost = 0;
+    for (uint8_t b : GetSpiritSlots()) {
+        if (b == 0) continue;
+        const auto* ab = FindSupportAbilityById(b);
+        if (ab) cost += ab->slot_cost;
+    }
+    return cost;
+}
+
 bool AmiiboBin::SetSpiritSlots(uint8_t slot1, uint8_t slot2, uint8_t slot3,
                                bool enforce_slot_cost,
                                std::string* error_out) {
@@ -425,7 +790,7 @@ bool AmiiboBin::SetSpiritSlots(uint8_t slot1, uint8_t slot2, uint8_t slot3,
         if (cost > 3) {
             if (error_out) {
                 std::ostringstream oss;
-                oss << "Spirit slots exceed 3-slot limit (" << cost << " slots used: "
+                oss << "Spirit slots exceed 3-slot limit (" << cost << " / 3 slots used: "
                     << s1->name << " [" << int(s1->slot_cost) << "] + "
                     << s2->name << " [" << int(s2->slot_cost) << "] + "
                     << s3->name << " [" << int(s3->slot_cost) << "]).";
@@ -433,15 +798,14 @@ bool AmiiboBin::SetSpiritSlots(uint8_t slot1, uint8_t slot2, uint8_t slot3,
             }
             return false;
         }
-        // Per SSBU Amiibo Bin Guide: if Slot 1 uses 2 or 3 slots, shift remaining effects appropriately
+        // Per SSBU Amiibo Bin Guide: if Slot 1 uses 3 slots, clear 2 & 3; if Slot 1 uses 2 slots, second skill goes in 0xEE
         if (s1->slot_cost == 3) {
             slot2 = 0;
             slot3 = 0;
         } else if (s1->slot_cost == 2) {
-            if (slot2 != 0 && slot3 == 0) {
-                slot3 = slot2;
-                slot2 = 0;
-            }
+            uint8_t second = (slot2 != 0) ? slot2 : slot3;
+            slot2 = 0;
+            slot3 = second;
         }
     }
     data_[0xEC] = slot1;
@@ -456,8 +820,6 @@ bool AmiiboBin::ApplyPrimarySpiritPreset(const PrimarySpiritPreset& preset) {
     return true;
 }
 
-// Bitfield reader matching MiDe's SSBU Amiibo Bin Guide:
-// Multi-byte regions reverse byte order (little-endian) and extract the specified bit slices.
 uint32_t AmiiboBin::ReadBits(size_t start_byte, int start_bit_in_first,
                              size_t end_byte, int end_bit_in_last) const {
     if (start_byte == end_byte) {
@@ -467,7 +829,6 @@ uint32_t AmiiboBin::ReadBits(size_t start_byte, int start_bit_in_first,
         uint32_t mask = (1u << width) - 1u;
         return (data_[start_byte] >> low) & mask;
     }
-    // Across 2 bytes: low bits from start_byte (0..start_bit_in_first), high bits from end_byte (end_bit_in_last..7)
     int width_first = start_bit_in_first + 1;
     uint32_t mask_first = (1u << width_first) - 1u;
     uint32_t part_first = data_[start_byte] & mask_first;
@@ -547,6 +908,15 @@ AmiiboBehaviorParams AmiiboBin::DecodeBehavior() const {
     p.charger             = rd_norm(0x180, 3, 0x181, 7, 5);
     p.appeal              = rd_norm(0x181, 6, 0x181, 2, 5);
 
+    p.fighter_1            = rd_norm(0x181, 1, 0x182, 3, 7);
+    p.fighter_2            = rd_norm(0x182, 2, 0x183, 4, 7);
+    p.fighter_3            = rd_norm(0x183, 3, 0x184, 5, 7);
+    p.fighter_4            = rd_norm(0x184, 4, 0x185, 6, 7);
+    p.fighter_5            = rd_norm(0x185, 5, 0x186, 7, 7);
+    p.advantageous_fighter = rd_norm(0x186, 6, 0x186, 0, 7);
+    p.weaken_fighter       = rd_norm(0x187, 7, 0x187, 1, 7);
+    p.revenge              = rd_norm(0x187, 0, 0x188, 2, 7);
+
     // Grounded Moves (0x188 - 0x195)
     p.ftilt    = rd_norm(0x188, 1, 0x189, 0, 10) * 100.0f;
     p.utilt    = rd_norm(0x18A, 7, 0x18B, 6, 10) * 100.0f;
@@ -568,6 +938,12 @@ AmiiboBehaviorParams AmiiboBin::DecodeBehavior() const {
     p.air_sspecial = rd_norm(0x19A, 0, 0x19B, 0, 9) * 100.0f;
     p.air_uspecial = rd_norm(0x19C, 7, 0x19D, 7, 9) * 100.0f;
     p.air_dspecial = rd_norm(0x19D, 6, 0x19E, 6, 9) * 100.0f;
+
+    // Additional Behavior (0x19E - 0x1A1)
+    p.escape_air_forward  = rd_norm(0x19E, 5, 0x19F, 6, 8) * 100.0f;
+    p.escape_air_backward = rd_norm(0x19F, 5, 0x1A0, 6, 8) * 100.0f;
+    p.appeal_hi           = rd_norm(0x1A0, 5, 0x1A1, 7, 7) * 100.0f;
+    p.appeal_lw           = rd_norm(0x1A1, 6, 0x1A1, 0, 7) * 100.0f;
 
     return p;
 }
@@ -620,6 +996,15 @@ void AmiiboBin::EncodeBehavior(const AmiiboBehaviorParams& in_params) {
     wr_norm(0x180, 3, 0x181, 7, 5, p.charger);
     wr_norm(0x181, 6, 0x181, 2, 5, p.appeal);
 
+    wr_norm(0x181, 1, 0x182, 3, 7, p.fighter_1);
+    wr_norm(0x182, 2, 0x183, 4, 7, p.fighter_2);
+    wr_norm(0x183, 3, 0x184, 5, 7, p.fighter_3);
+    wr_norm(0x184, 4, 0x185, 6, 7, p.fighter_4);
+    wr_norm(0x185, 5, 0x186, 7, 7, p.fighter_5);
+    wr_norm(0x186, 6, 0x186, 0, 7, p.advantageous_fighter);
+    wr_norm(0x187, 7, 0x187, 1, 7, p.weaken_fighter);
+    wr_norm(0x187, 0, 0x188, 2, 7, p.revenge);
+
     // Grounded Moves
     wr_norm(0x188, 1, 0x189, 0, 10, p.ftilt / 100.0f);
     wr_norm(0x18A, 7, 0x18B, 6, 10, p.utilt / 100.0f);
@@ -641,9 +1026,15 @@ void AmiiboBin::EncodeBehavior(const AmiiboBehaviorParams& in_params) {
     wr_norm(0x19A, 0, 0x19B, 0, 9, p.air_sspecial / 100.0f);
     wr_norm(0x19C, 7, 0x19D, 7, 9, p.air_uspecial / 100.0f);
     wr_norm(0x19D, 6, 0x19E, 6, 9, p.air_dspecial / 100.0f);
+
+    // Additional Behavior
+    wr_norm(0x19E, 5, 0x19F, 6, 8, p.escape_air_forward / 100.0f);
+    wr_norm(0x19F, 5, 0x1A0, 6, 8, p.escape_air_backward / 100.0f);
+    wr_norm(0x1A0, 5, 0x1A1, 7, 7, p.appeal_hi / 100.0f);
+    wr_norm(0x1A1, 6, 0x1A1, 0, 7, p.appeal_lw / 100.0f);
 }
 
-// Exact 25-state SSBU Personality Evaluator from jozz024/smash-amiibo-editor/resources/personality_data.json
+// Exact 25-state SSBU Personality Evaluator matching jozz024/smash-amiibo-editor/resources/personality_data.json
 std::string AmiiboBin::EvaluatePersonality() const {
     static const char* kPersonalityNames[25] = {
         "Normal",
@@ -659,80 +1050,196 @@ std::string AmiiboBin::EvaluatePersonality() const {
 
     AmiiboBehaviorParams b = DecodeBehavior();
 
-    auto score_param = [](float val, float min1, float pt1, float min2, float pt2, bool flip) -> float {
-        float v = flip ? (1.0f - val) : val;
-        if (v < min1) return 0.0f;
-        if (v >= min2) return pt2;
-        float t = (v - min1) / (min2 - min1);
-        return pt1 + t * (pt2 - pt1);
+    struct Rule {
+        float val;
+        float min_1, pt_1;
+        float min_2, pt_2;
+        bool flip;
+    };
+
+    auto eval_rule = [](const Rule& r) -> float {
+        float v = r.flip ? (1.0f - r.val) : r.val;
+        if (v < r.min_1) return 0.0f;
+        if (v >= r.min_2) return r.pt_2;
+        return r.pt_1 + ((v - r.min_1) / (r.min_2 - r.min_1)) * (r.pt_2 - r.pt_1);
+    };
+
+    auto eval_branch = [&](const std::vector<Rule>& rules, bool has_nec, float nec_val, float nec_min, bool nec_flip) -> float {
+        if (has_nec) {
+            float nv = nec_flip ? (1.0f - nec_val) : nec_val;
+            if (nv < nec_min) return 0.0f;
+        }
+        float total = 0.0f;
+        for (const auto& r : rules) total += eval_rule(r);
+        return total;
     };
 
     // 1. def (Cautious / Realistic / Unflappable)
-    float s_def = 0.0f;
-    if ((1.0f - b.offensive) >= 0.26f) {
-        s_def += score_param(b.offensive, 0.26f, 18, 0.76f, 20, true) * 2.2f;
-        s_def += score_param(b.grounded, 0.25f, 18, 0.76f, 18, false) * 2.2f;
-        s_def += score_param(b.shield_master, 0.25f, 38, 0.76f, 42, false) * 3.0f;
-        s_def += score_param(b.dash, 0.51f, 18, 0.76f, 25, true) * 2.0f;
-    }
+    float s_def = eval_branch({
+        {b.offensive, 0.26f, 18, 0.76f, 20, true},
+        {b.grounded, 0.25f, 18, 0.76f, 18, false},
+        {b.attack_out_cliff, 0.26f, 10, 0.51f, 15, true},
+        {b.dash, 0.51f, 18, 0.76f, 25, true},
+        {b.cliffer, 0.26f, 15, 0.51f, 20, true},
+        {b.shield_master, 0.25f, 38, 0.76f, 42, false},
+        {b.shield_catch_master, 0.26f, 3, 0.51f, 5, false},
+        {b.item_throw_to_target, 0.26f, 3, 0.51f, 4, true},
+        {b.dragoon_collector, 0.26f, 3, 0.51f, 4, true},
+        {b.smashball_collector, 0.26f, 3, 0.51f, 4, true},
+        {b.hammer_collector, 0.26f, 3, 0.51f, 4, true},
+        {b.special_flagger, 0.26f, 3, 0.51f, 4, true}
+    }, true, b.offensive, 0.26f, true);
 
     // 2. agl (Light / Quick / Lightning Fast)
-    float s_agl = 0.0f;
-    if (b.dash >= 0.25f) {
-        s_agl += score_param(b.dash, 0.25f, 16, 0.76f, 40, false) * 3.2f;
-        s_agl += score_param(b.dash_attacker, 0.25f, 13, 0.51f, 22, false) * 2.5f;
-        s_agl += score_param(b.offensive, 0.25f, 11, 0.51f, 24, false) * 2.0f;
-        s_agl += score_param(b.shield_master, 0.26f, 13, 0.76f, 30, true) * 2.0f;
-    }
+    float s_agl = eval_branch({
+        {b.offensive, 0.25f, 11, 0.51f, 24, false},
+        {b.dash, 0.25f, 16, 0.76f, 40, false},
+        {b.air_offensive, 0.26f, 5, 0.76f, 15, true},
+        {b.smash_holder, 0.26f, 11, 0.51f, 22, true},
+        {b.dash_attacker, 0.25f, 13, 0.51f, 22, false},
+        {b.critical_hitter, 0.26f, 8, 0.76f, 15, true},
+        {b.shield_master, 0.26f, 13, 0.76f, 30, true},
+        {b.item_collector, 0.22f, 11, 0.48f, 15, false},
+        {b.hammer_collector, 0.26f, 2, 0.51f, 3, true},
+        {b.special_flagger, 0.26f, 2, 0.51f, 3, true},
+        {b.homerun_batter, 0.26f, 2, 0.51f, 3, true},
+        {b.club_swinger, 0.26f, 2, 0.51f, 3, true},
+        {b.carrier_broker, 0.22f, 2, 0.48f, 3, false},
+        {b.charger, 0.26f, 2, 0.51f, 2, true}
+    }, true, b.dash, 0.25f, false);
 
     // 3. ofn (Aggressive / Offensive / Reckless)
-    float s_ofn = 0.0f;
-    if (b.near_range >= 0.25f) {
-        s_ofn += score_param(b.near_range, 0.25f, 15, 0.76f, 22, false) * 2.8f;
-        s_ofn += score_param(b.offensive, 0.25f, 21, 0.76f, 30, false) * 3.0f;
-        s_ofn += score_param(b.air_offensive, 0.26f, 10, 0.76f, 18, false) * 2.2f;
-        s_ofn += score_param(b.dash_attacker, 0.25f, 10, 0.51f, 18, false) * 2.0f;
-    }
+    float s_ofn = eval_branch({
+        {b.near_range, 0.25f, 15, 0.76f, 22, false},
+        {b.offensive, 0.25f, 21, 0.76f, 30, false},
+        {b.attack_out_cliff, 0.26f, 13, 0.51f, 20, false},
+        {b.dash, 0.25f, 11, 0.51f, 13, false},
+        {b.air_offensive, 0.26f, 10, 0.76f, 18, false},
+        {b.feint_shooter, 0.26f, 7, 0.76f, 8, true},
+        {b.dash_attacker, 0.25f, 10, 0.51f, 18, false},
+        {b.meteor_master, 0.26f, 10, 0.51f, 28, false},
+        {b.item_collector, 0.26f, 2, 0.51f, 4, true},
+        {b.item_throw_to_target, 0.48f, 4, 0.74f, 8, false},
+        {b.dragoon_collector, 0.26f, 3, 0.51f, 4, true},
+        {b.smashball_collector, 0.26f, 3, 0.51f, 4, true},
+        {b.hammer_collector, 0.26f, 3, 0.51f, 4, true},
+        {b.special_flagger, 0.26f, 3, 0.76f, 4, true}
+    }, true, b.near_range, 0.25f, false);
 
     // 4. rsk (Thrill Seeker / Daredevil / Unstoppable)
-    float s_rsk = 0.0f;
-    if (b.attack_out_cliff >= 0.26f) {
-        s_rsk += score_param(b.attack_out_cliff, 0.26f, 24, 0.76f, 28, false) * 3.2f;
-        s_rsk += score_param(b.meteor_master, 0.26f, 12, 0.51f, 30, false) * 3.0f;
-        s_rsk += score_param(b.offensive, 0.25f, 11, 0.76f, 16, false) * 2.0f;
-        s_rsk += score_param(b.near_range, 0.25f, 15, 0.51f, 22, false) * 2.0f;
-    }
+    float s_rsk = eval_branch({
+        {b.near_range, 0.25f, 15, 0.51f, 22, false},
+        {b.offensive, 0.25f, 11, 0.76f, 16, false},
+        {b.grounded, 0.26f, 5, 0.51f, 10, true},
+        {b.attack_out_cliff, 0.26f, 24, 0.76f, 28, false},
+        {b.air_offensive, 0.26f, 8, 0.76f, 13, false},
+        {b.cliffer, 0.51f, 5, 0.76f, 8, false},
+        {b.feint_master, 0.25f, 3, 0.76f, 5, false},
+        {b.feint_counter, 0.25f, 3, 0.51f, 5, false},
+        {b.feint_shooter, 0.26f, 2, 0.51f, 3, true},
+        {b.dash_attacker, 0.25f, 10, 0.51f, 16, false},
+        {b.critical_hitter, 0.26f, 4, 0.51f, 8, false},
+        {b.meteor_master, 0.26f, 12, 0.51f, 30, false},
+        {b.just_shield_master, 0.26f, 3, 0.51f, 6, false},
+        {b.hammer_collector, 0.20f, 5, 0.73f, 8, false},
+        {b.special_flagger, 0.20f, 2, 0.46f, 5, false},
+        {b.carrier_broker, 0.22f, 2, 0.74f, 3, false}
+    }, true, b.attack_out_cliff, 0.26f, false);
 
     // 5. gen (Technical / Technician / Ace)
-    float s_gen = 0.0f;
-    if (b.just_shield_master >= 0.26f) {
-        s_gen += score_param(b.just_shield_master, 0.26f, 23, 0.76f, 35, false) * 2.6f;
-        s_gen += score_param(b.feint_master, 0.25f, 8, 0.76f, 13, false) * 2.2f;
-        s_gen += score_param(b.feint_counter, 0.25f, 8, 0.76f, 13, false) * 2.2f;
-        s_gen += score_param(b.catcher, 0.25f, 7, 0.76f, 9, false) * 2.0f;
-    }
+    float s_gen = eval_branch({
+        {b.attack_out_cliff, 0.26f, 7, 0.76f, 7, false},
+        {b.air_offensive, 0.26f, 5, 0.76f, 7, true},
+        {b.feint_master, 0.25f, 8, 0.76f, 13, false},
+        {b.feint_counter, 0.25f, 8, 0.76f, 13, false},
+        {b.feint_shooter, 0.25f, 8, 0.76f, 13, false},
+        {b.catcher, 0.25f, 7, 0.76f, 9, false},
+        {b.attack_cancel, 0.26f, 5, 0.76f, 5, false},
+        {b.meteor_master, 0.26f, 4, 0.76f, 15, false},
+        {b.shield_master, 0.25f, 4, 0.76f, 10, false},
+        {b.just_shield_master, 0.26f, 23, 0.76f, 35, false},
+        {b.shield_catch_master, 0.26f, 5, 0.46f, 9, false},
+        {b.item_collector, 0.22f, 3, 0.76f, 8, false},
+        {b.item_throw_to_target, 0.22f, 3, 0.48f, 4, false},
+        {b.dragoon_collector, 0.20f, 3, 0.46f, 7, false},
+        {b.smashball_collector, 0.20f, 3, 0.76f, 5, false},
+        {b.item_swinger, 0.22f, 2, 0.46f, 3, false},
+        {b.homerun_batter, 0.20f, 4, 0.76f, 4, false},
+        {b.club_swinger, 0.20f, 4, 0.76f, 4, false},
+        {b.death_swinger, 0.20f, 4, 0.46f, 4, false},
+        {b.item_shooter, 0.22f, 3, 0.76f, 4, false},
+        {b.carrier_broker, 0.26f, 4, 0.76f, 4, true}
+    }, true, b.just_shield_master, 0.26f, false);
 
     // 6. ent (Show-Off / Flashy / Entertainer)
-    float s_ent = 0.0f;
-    if (b.appeal >= 0.25f) {
-        s_ent += score_param(b.appeal, 0.25f, 18, 0.76f, 34, false) * 4.5f;
-        s_ent += score_param(b.meteor_master, 0.26f, 7, 0.76f, 11, false) * 2.5f;
-        s_ent += score_param(b.attack_out_cliff, 0.26f, 8, 0.76f, 12, false) * 2.5f;
-    }
+    float s_ent = eval_branch({
+        {b.attack_out_cliff, 0.26f, 8, 0.76f, 12, false},
+        {b._100_keeper, 0.26f, 2, 0.51f, 4, true},
+        {b.smash_holder, 0.25f, 2, 0.51f, 3, false},
+        {b.critical_hitter, 0.26f, 2, 0.76f, 3, false},
+        {b.meteor_master, 0.26f, 7, 0.76f, 11, false},
+        {b.just_shield_master, 0.26f, 8, 0.76f, 12, false},
+        {b.item_throw_to_target, 0.26f, 5, 0.51f, 13, true},
+        {b.dragoon_collector, 0.20f, 8, 0.46f, 13, false},
+        {b.smashball_collector, 0.20f, 8, 0.46f, 13, false},
+        {b.hammer_collector, 0.20f, 8, 0.46f, 14, false},
+        {b.special_flagger, 0.20f, 13, 0.73f, 17, false},
+        {b.homerun_batter, 0.20f, 8, 0.73f, 12, false},
+        {b.club_swinger, 0.20f, 5, 0.46f, 13, false},
+        {b.death_swinger, 0.20f, 5, 0.46f, 14, false},
+        {b.charger, 0.22f, 2, 0.48f, 3, false},
+        {b.appeal, 0.25f, 18, 0.76f, 34, false}
+    }, true, b.appeal, 0.25f, false);
 
     // 7. cau (Cool / Logical / Sly)
-    float s_cau = 0.0f;
-    if ((1.0f - b.shield_master) >= 0.26f) {
-        s_cau += score_param(b.shield_master, 0.26f, 29, 0.76f, 42, true) * 2.2f;
-        s_cau += score_param(b.feint_shooter, 0.25f, 3, 0.76f, 6, false) * 4.0f;
-        s_cau += score_param(b.grounded, 0.25f, 7, 0.51f, 12, false) * 3.0f;
-    }
+    float s_cau = eval_branch({
+        {b.near_range, 0.26f, 5, 0.51f, 10, true},
+        {b.offensive, 0.26f, 6, 0.51f, 12, true},
+        {b.grounded, 0.25f, 7, 0.51f, 12, false},
+        {b.attack_out_cliff, 0.26f, 7, 0.51f, 12, true},
+        {b.dash, 0.26f, 7, 0.51f, 12, true},
+        {b.air_offensive, 0.26f, 3, 0.76f, 6, true},
+        {b.cliffer, 0.26f, 8, 0.76f, 10, true},
+        {b.feint_master, 0.25f, 3, 0.76f, 4, false},
+        {b.feint_counter, 0.26f, 3, 0.51f, 5, true},
+        {b.feint_shooter, 0.25f, 3, 0.76f, 6, false},
+        {b.smash_holder, 0.51f, 3, 0.76f, 6, true},
+        {b.dash_attacker, 0.51f, 4, 0.76f, 6, true},
+        {b.critical_hitter, 0.26f, 4, 0.76f, 6, true},
+        {b.meteor_master, 0.26f, 4, 0.76f, 5, true},
+        {b.shield_master, 0.26f, 29, 0.76f, 42, true},
+        {b.just_shield_master, 0.26f, 5, 0.76f, 5, true},
+        {b.hammer_collector, 0.26f, 4, 0.51f, 10, true},
+        {b.special_flagger, 0.26f, 6, 0.51f, 12, true},
+        {b.charger, 0.26f, 3, 0.76f, 5, true}
+    }, true, b.shield_master, 0.26f, true);
 
     // 8. dyn (Gadabout / Trickster / Dynamic)
-    float s_dyn = 0.0f;
-    s_dyn += score_param(b.critical_hitter, 0.26f, 12, 0.76f, 15, false) * 3.5f;
-    s_dyn += score_param(b.smash_holder, 0.25f, 7, 0.76f, 9, false) * 3.5f;
-    s_dyn += score_param(b.charger, 0.22f, 5, 0.74f, 6, false) * 3.5f;
+    float s_dyn = eval_branch({
+        {b.offensive, 0.25f, 5, 0.76f, 7, false},
+        {b.attack_out_cliff, 0.26f, 3, 0.51f, 5, false},
+        {b.air_offensive, 0.26f, 7, 0.76f, 10, false},
+        {b.catcher, 0.26f, 3, 0.51f, 3, true},
+        {b.attack_cancel, 0.26f, 2, 0.51f, 2, true},
+        {b.smash_holder, 0.25f, 7, 0.76f, 9, false},
+        {b.dash_attacker, 0.25f, 6, 0.76f, 7, false},
+        {b.critical_hitter, 0.26f, 12, 0.76f, 15, false},
+        {b.meteor_master, 0.26f, 11, 0.51f, 12, false},
+        {b.shield_master, 0.25f, 11, 0.76f, 12, false},
+        {b.just_shield_master, 0.26f, 7, 0.76f, 8, true},
+        {b.item_throw_to_target, 0.26f, 2, 0.76f, 3, true},
+        {b.dragoon_collector, 0.20f, 3, 0.46f, 5, false},
+        {b.smashball_collector, 0.20f, 3, 0.46f, 7, false},
+        {b.hammer_collector, 0.20f, 3, 0.46f, 7, false},
+        {b.special_flagger, 0.20f, 5, 0.46f, 10, false},
+        {b.item_swinger, 0.26f, 6, 0.51f, 8, true},
+        {b.homerun_batter, 0.46f, 9, 0.71f, 10, false},
+        {b.club_swinger, 0.46f, 9, 0.71f, 10, false},
+        {b.death_swinger, 0.46f, 9, 0.71f, 10, false},
+        {b.item_shooter, 0.51f, 2, 0.74f, 1, true},
+        {b.carrier_broker, 0.48f, 2, 0.71f, 1, false},
+        {b.charger, 0.22f, 5, 0.74f, 6, false}
+    }, false, 0.0f, 0.0f, false);
 
     struct Branch { float score; float t1, t2, t3; int p1, p2, p3; };
     Branch branches[8] = {
@@ -760,13 +1267,23 @@ std::string AmiiboBin::EvaluatePersonality() const {
 }
 
 void AmiiboBin::UpdateChecksumsAndCrypto() {
-    // Increment 16-bit write counter at 0xB4..0xB5 (capped at 65535 per emuiibo spec)
-    uint16_t wc = (static_cast<uint16_t>(data_[0xB4]) << 8) | data_[0xB5];
-    if (wc < 0xFFFF) ++wc;
-    data_[0xB4] = static_cast<uint8_t>((wc >> 8) & 0xFF);
-    data_[0xB5] = static_cast<uint8_t>(wc & 0xFF);
+    // Increment 16-bit write counters at 0x029..0x02A and 0x0B4..0x0B5 (capped at 65535)
+    uint16_t wc_amiibo = (static_cast<uint16_t>(data_[0x029]) << 8) | data_[0x02A];
+    if (wc_amiibo < 0xFFFF) ++wc_amiibo;
+    data_[0x029] = static_cast<uint8_t>((wc_amiibo >> 8) & 0xFF);
+    data_[0x02A] = static_cast<uint8_t>(wc_amiibo & 0xFF);
 
-    // Compute AppData & Tag HMAC-SHA256 signatures at 0x08..0x27 and 0xDC..0xDF
+    uint16_t wc = (static_cast<uint16_t>(data_[0x0B4]) << 8) | data_[0x0B5];
+    if (wc < 0xFFFF) ++wc;
+    data_[0x0B4] = static_cast<uint8_t>((wc >> 8) & 0xFF);
+    data_[0x0B5] = static_cast<uint8_t>(wc & 0xFF);
+
+    // Ensure SSBU AppID (0x34F80200) is set at 0x0B6..0x0B9
+    data_[0x0B6] = 0x34;
+    data_[0x0B7] = 0xF8;
+    data_[0x0B8] = 0x02;
+    data_[0x0B9] = 0x00;
+
     const uint8_t default_key[16] = {
         0x53, 0x53, 0x42, 0x55, 0x5F, 0x41, 0x4D, 0x49,
         0x49, 0x42, 0x4F, 0x5F, 0x48, 0x4D, 0x41, 0x43
@@ -775,10 +1292,8 @@ void AmiiboBin::UpdateChecksumsAndCrypto() {
     size_t key_len = has_retail_key_ ? retail_key_.size() : sizeof(default_key);
 
     uint8_t hmac_out[32]{};
-    HmacSha256(key_ptr, key_len, data_.data() + 0xE0, 0xD4, hmac_out);
-    // Store 4-byte AppData verification tag at 0xDC..0xDF (per SSBU Amiibo Bin Guide page 2)
-    std::memcpy(data_.data() + 0xDC, hmac_out, 4);
-    // Store 32-byte tag HMAC at 0x1B4..0x1D3
+    HmacSha256(key_ptr, key_len, data_.data() + 0x0E0, 0x0D4, hmac_out);
+    std::memcpy(data_.data() + 0x0DC, hmac_out, 4);
     std::memcpy(data_.data() + 0x1B4, hmac_out, 32);
 }
 
