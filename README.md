@@ -1,29 +1,20 @@
-# Super Smash Bros. Ultimate — Amiibo Trainer & Spirit Studio v2.1 (GPU-First C++20)
+# Super Smash Bros. Ultimate — Amiibo Trainer & Spirit Studio v2.2 (Auto-Mii + GPU-First C++20)
 
-A native C++20 Windows GUI & cross-platform CLI application that loads a 540-byte NTAG215 Amiibo `.bin` file, equips **Primary & Support Spirits** from the *Super Smash Bros. Ultimate* Spirit Collection, simulates **hundreds or thousands of combat matches** on the **GPU first (Direct3D 11 Compute Shader `cs_5_0` / OpenCL)** before falling back to the CPU, and outputs a **Level 50 ready `.bin` file** with authentic bit-packed AI behavior matrices, exact 25-state personality scoring, and optional `key_retail.bin` NTAG215 AES-128-CTR encryption & HMAC-SHA256 signing.
+A native C++20 Windows GUI & cross-platform CLI application that loads a 540-byte NTAG215 Amiibo `.bin` file, **automatically pairs a valid 96-byte Owner Mii (with CRC-16-CCITT) and UTF-16BE Nickname** on blank or virgin `.bin` files, equips **Primary & Support Spirits** from the *Super Smash Bros. Ultimate* Spirit Collection, simulates **hundreds or thousands of combat matches** on the **GPU first (Direct3D 11 Compute Shader `cs_5_0` / OpenCL)** before falling back to the CPU, and outputs a **Level 50 ready `.bin` file**.
 
-## Key Features in v2.1
+## Key Features in v2.2
 
-1. **GPU-First Compute Engine (`include/gpu_compute.hpp`, `src/gpu_compute.cpp`)**:
+1. **Automatic Owner Mii & Nickname Pairing (`src/amiibo_bin.cpp`)**:
+   - Blank or "virgin" unregistered Amiibo `.bin` dumps (`0x02C = 0x00`) are automatically paired with a valid 96-byte Nintendo 3DS/Wii U/Switch `FFLStoreData` Owner Mii structure (`0x04C–0x0AB`), a verified big-endian **CRC-16-CCITT (`0x1021`)** checksum (`0x0AA–0x0AB`), a 10-character `UTF-16BE` Amiibo Nickname (`0x038–0x04B`), the 64-bit SSBU Program/Title ID (`0x01006A800016E000` at `0x0AC–0x0B3`), the 216-byte AppData CRC-32 (`0x034–0x037`), and initialization flags (`0x02C = 0x30`).
+   - Preserves existing Owner Mii and Nickname data automatically when loading a `.bin` already registered on a Switch, while allowing customization via GUI text boxes or `--nickname` / `--mii-name` CLI flags.
+2. **GPU-First Compute Engine (`include/gpu_compute.hpp`, `src/gpu_compute.cpp`)**:
    - **Direct3D 11 Compute Shader (`cs_5_0`) on Windows**: Enumerates DXGI hardware adapters (`IDXGIFactory1::EnumAdapters1`) to select the highest-VRAM dedicated/integrated GPU first, compiles an HLSL `cs_5_0` compute kernel (`CSMain` with `[numthreads(64, 1, 1)]`), and dispatches all match simulations in parallel on the GPU via `RWStructuredBuffer<GpuMatchOutcome>`.
-   - **Multi-Tier Fallback Hierarchy (`GPU -> CPU`)**:
-     1. **Tier 1**: Dedicated / Integrated Hardware GPU via Direct3D 11 `cs_5_0` (`D3D_DRIVER_TYPE_UNKNOWN` / `D3D_DRIVER_TYPE_HARDWARE`) or OpenCL (`libOpenCL.so`).
-     2. **Tier 2**: Direct3D 11 DirectCompute (`D3D_DRIVER_TYPE_WARP` `cs_5_0`) on headless Windows environments without a physical display adapter.
-     3. **Tier 3**: Automatic host CPU fallback if no GPU compute runtime is available or if `--backend cpu` is explicitly selected.
-2. **Full NTAG215 Tag ↔ Internal Format Conversion & `nfc3d` Crypto (`src/amiibo_bin.cpp`)**:
+   - **Automatic Fallback Hierarchy (`GPU -> CPU`)**: Dedicated/Integrated Hardware GPU (`D3D11 cs_5_0` / `OpenCL`) -> DirectCompute (`D3D_DRIVER_TYPE_WARP cs_5_0`) -> Host Multi-Core CPU fallback.
+3. **Full NTAG215 Tag ↔ Internal Format Conversion & `nfc3d` Crypto (`src/amiibo_bin.cpp`)**:
    - Automatic detection of encrypted NTAG215 Tag `.bin` dumps (`TagToInternal` / `InternalToTag` layout mapping) vs. decrypted/plain `.bin` files.
    - Full `amiitool` / `nfc3d` AES-128-CTR encryption/decryption, NIST SP 800-90A HMAC-DRBG key derivation, and dual HMAC-SHA256 tag/data signature generation when a 160-byte `key_retail.bin` is loaded.
-   - Character ID (`uint16_t`) is written synchronously to both the internal `amiitool` offset (`0x1DC–0x1DD`) and the NTAG215 Tag Model Info offset (`0x054–0x055`).
-3. **Complete 89-Fighter Roster & Clean Spirit Collection (`src/ssbu_loadouts.cpp`)**:
-   - All **89 playable SSBU fighters** (Mario through Sora, including all Echo Fighters and DLC Fighter Passes 1 & 2) with authentic character IDs and AI combat profiles.
-   - **69 Primary Spirit presets** (Legendary 4-Star, Ace 3-Star, Advanced, Novice) plus custom ATK/DEF (`-2000` to `5000`) and quick stat buttons (`2500/2500`, `3200/1800`, `1800/3200`, `0/0`).
-   - All **255 Support Spirit Ability IDs** (`0–254`) in the binary table, with internal `"Reserved"` placeholder slots filtered out of the GUI dropdowns (`193` active selectable skills) and searchable via a live keyword filter.
-4. **Exact 25-State Personality Scoring (`src/amiibo_bin.cpp`)**:
-   - Implements the exact 8-branch (`def`, `agl`, `ofn`, `rsk`, `gen`, `ent`, `cau`, `dyn`) linear interpolation and `necessary_param` thresholds from `jozz024/smash-amiibo-editor`'s `personality_data.json`.
-5. **Upgraded Native Windows GUI (`src/win32_gui.cpp`)**:
-   - Common Controls v6 visual styles manifest with crisp `Segoe UI` and `Consolas` typography.
-   - **Device Selector (`GPU First (Auto)`, `Force GPU (D3D11)`, `Force CPU Only`)** and live GPU adapter/timing telemetry in the Inspector and Status Bar.
-   - 3-Tab Live Inspector (`View 1: Overview & Spirits`, `View 2: Full AI Behavior & Moves`, `View 3: Match Simulation Log`).
+4. **Complete 89-Fighter Roster, 69 Primary Spirits & 193 Active Support Spirits (`src/ssbu_loadouts.cpp`)**:
+   - All **89 playable SSBU fighters**, **69 Primary Spirit presets**, and all **255 Support Spirit Ability IDs** (`193` selectable active skills with internal `"Reserved"` placeholders filtered out).
 
 ## Building & Running
 
