@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "amiibo_bin.hpp"
+#include "gpu_compute.hpp"
 #include "ssbu_loadouts.hpp"
 #include "training_sim.hpp"
 
@@ -189,6 +190,30 @@ void TestPersonalityScoringBranches() {
     std::cout << "[PASS] TestPersonalityScoringBranches (Verified " << p_so << " & " << p_dd << ")\n";
 }
 
+void TestGpuFirstComputeEngine() {
+    ssbu::GpuDeviceInfo info = ssbu::GpuComputeEngine::ProbeGpuDevice();
+    assert(!info.backend_name.empty());
+    assert(!info.adapter_name.empty());
+
+#ifdef _WIN32
+    // On Windows, Direct3D 11 Compute Shader (cs_5_0) must always succeed (Hardware GPU or DirectCompute WARP)
+    assert(info.gpu_available);
+    ssbu::GpuSimParams params{};
+    params.num_games = 256;
+    params.random_seed = 1337;
+    std::vector<ssbu::GpuMatchOutcome> outcomes;
+    ssbu::GpuDeviceInfo used_dev{};
+    double ms = 0.0;
+    std::string err;
+    bool ok = ssbu::GpuComputeEngine::TryRunMatchBatchOnGpu(params, outcomes, &used_dev, &ms, &err);
+    assert(ok);
+    assert(outcomes.size() == 256);
+#endif
+
+    std::cout << "[PASS] TestGpuFirstComputeEngine (Backend: " << info.backend_name
+              << " | Adapter: " << info.adapter_name << ")\n";
+}
+
 void TestTrainingSimulation500Games() {
     ssbu::AmiiboBin bin;
     bin.InitializeBlankFighter(0x0000, 0); // Mario
@@ -200,6 +225,7 @@ void TestTrainingSimulation500Games() {
     cfg.opponent_char_id = 0x0580; // Fox
     cfg.archetype = ssbu::OpponentArchetype::AerialEdgeguarder;
     cfg.focus = ssbu::TrainingFocus::AerialMeteorEdgeguarder;
+    cfg.compute_preference = ssbu::ComputePreference::GpuFirstAuto;
     cfg.freeze_learning_after_training = true;
     cfg.random_seed = 42;
 
@@ -210,6 +236,9 @@ void TestTrainingSimulation500Games() {
     assert(bin.GetDisplayedLevel() == 50);
     assert(bin.GetCpuLevel() == 9);
     assert(!bin.GetLearningEnabled()); // Frozen after training
+#ifdef _WIN32
+    assert(sum.executed_on_gpu);
+#endif
 
     ssbu::AmiiboBehaviorParams trained_bp = bin.DecodeBehavior();
     assert(trained_bp.air_offensive > 0.65f);
@@ -232,8 +261,8 @@ void TestTrainingSimulation500Games() {
     std::remove(tmp_file.c_str());
 
     float win_rate = 100.0f * static_cast<float>(sum.wins) / static_cast<float>(sum.total_games);
-    std::cout << "[PASS] TestTrainingSimulation500Games (Final Lv: "
-              << sum.final_level
+    std::cout << "[PASS] TestTrainingSimulation500Games (Compute: " << sum.compute_backend_used
+              << ", Final Lv: " << sum.final_level
               << ", Win Rate: " << win_rate << "%, Personality: "
               << sum.final_personality << ")\n";
 }
@@ -241,12 +270,13 @@ void TestTrainingSimulation500Games() {
 } // namespace
 
 int main() {
-    std::cout << "Running SSBU Amiibo Trainer v2.0 C++20 Unit & Integration Tests...\n";
+    std::cout << "Running SSBU Amiibo Trainer v2.1 (GPU-First) C++20 Unit & Integration Tests...\n";
     TestSpiritCatalogAndRoster();
     TestBitfieldPackingAndStats();
     TestNtag215TagConversionAndCryptoRoundTrip();
     TestPersonalityScoringBranches();
+    TestGpuFirstComputeEngine();
     TestTrainingSimulation500Games();
-    std::cout << "All SSBU Amiibo Trainer v2.0 tests passed!\n";
+    std::cout << "All SSBU Amiibo Trainer v2.1 tests passed!\n";
     return 0;
 }

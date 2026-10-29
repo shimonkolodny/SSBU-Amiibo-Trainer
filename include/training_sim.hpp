@@ -1,5 +1,6 @@
 #pragma once
 #include "amiibo_bin.hpp"
+#include "gpu_compute.hpp"
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -32,6 +33,7 @@ struct TrainingConfig {
     uint16_t opponent_char_id = 0x0580; // Default: Fox (when not FullRosterGauntlet)
     OpponentArchetype archetype = OpponentArchetype::FullRosterGauntlet;
     TrainingFocus focus = TrainingFocus::TournamentOptimal;
+    ComputePreference compute_preference = ComputePreference::GpuFirstAuto; // Default: GPU First -> CPU Fallback
     int opponent_cpu_level = 9;
     bool freeze_learning_after_training = true;
     uint32_t random_seed = 0x53534255;
@@ -65,6 +67,10 @@ struct TrainingSummary {
     int final_cpu_level = 9;
     std::string initial_personality;
     std::string final_personality;
+    bool executed_on_gpu = false;
+    std::string compute_backend_used = "CPU Fallback";
+    std::string compute_adapter_name = "Host Multi-Core CPU";
+    double compute_elapsed_ms = 0.0;
     AmiiboBehaviorParams final_behavior;
     std::vector<MatchResult> sample_matches;
 };

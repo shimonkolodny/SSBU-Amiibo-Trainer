@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "amiibo_bin.hpp"
+#include "gpu_compute.hpp"
 #include "ssbu_loadouts.hpp"
 #include "training_sim.hpp"
 
@@ -59,6 +60,7 @@ enum ControlId {
     ID_BTN_GAMES_1000 = 146,
     ID_BTN_GAMES_5000 = 147,
     ID_BTN_TRAIN = 148,
+    ID_CMB_COMPUTE = 149,
 
     ID_EDT_TUNE_OFFENSE = 160,
     ID_EDT_TUNE_GROUNDED = 161,
@@ -78,6 +80,7 @@ enum ControlId {
 
 struct GuiAppState {
     AmiiboBin bin;
+    GpuDeviceInfo gpu_info;
     std::string current_path = "unloaded_amiibo.bin";
     std::string last_sim_log = "No training matches run yet. Configure your opponent and click 'RUN FULL TRAINING SIMULATION'.\r\n";
     int active_view = 0; // 0 = Overview, 1 = Full AI Behavior & Moves, 2 = Match Log
@@ -102,6 +105,7 @@ struct GuiAppState {
     HWND hwnd_opponent = nullptr;
     HWND hwnd_archetype = nullptr;
     HWND hwnd_focus = nullptr;
+    HWND hwnd_compute = nullptr;
     HWND hwnd_games = nullptr;
 
     HWND hwnd_tune_offense = nullptr;
@@ -134,10 +138,15 @@ static std::string BuildOverviewReport(const AmiiboBin& bin, const std::string& 
     const auto* fighter = FindFighterById(bin.GetCharacterId());
     std::ostringstream oss;
     oss << "====================================================================\n";
-    oss << "         SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.0          \n";
+    oss << "       SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.1 (GPU)      \n";
     oss << "====================================================================\n";
     oss << "File Path          : " << path << "\n";
     oss << "Binary Format      : " << bin.GetFormatStatusString() << "\n";
+    oss << "Compute Engine     : " << g_app.gpu_info.backend_name << " (" << g_app.gpu_info.adapter_name;
+    if (g_app.gpu_info.dedicated_vram_mb > 0) {
+        oss << ", " << g_app.gpu_info.dedicated_vram_mb << " MB VRAM";
+    }
+    oss << ")\n";
     oss << "Fighter Identity   : " << (fighter ? fighter->name : "Unknown")
         << " (#" << (fighter ? fighter->roster_num : "??")
         << " | ID 0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
@@ -409,6 +418,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             g_app.bin.InitializeBlankFighter(0x0000, 0);
             g_app.bin.TryAutoLoadRetailKey();
+            g_app.gpu_info = GpuComputeEngine::ProbeGpuDevice();
 
             // --- Group 1: Amiibo File, Fighter Identity & Crypto Keys ---
             HWND grp1 = CreateWindowA("BUTTON", "1. Amiibo File (.bin), Fighter Identity & Retail Crypto Keys",
@@ -447,86 +457,90 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             // --- Group 2: SSBU Spirit Collection & Stat Loadout ---
             HWND grp2 = CreateWindowA("BUTTON", "2. SSBU Spirit Collection (Primary & 255 Support Spirit Skills)",
-                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 158, 490, 250, hwnd, nullptr, nullptr, nullptr);
+                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 158, 490, 245, hwnd, nullptr, nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Primary Preset:", WS_VISIBLE | WS_CHILD, 26, 182, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Primary Preset:", WS_VISIBLE | WS_CHILD, 26, 180, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_primary = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 178, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_PRIMARY_SPIRIT), nullptr, nullptr);
+                125, 176, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_PRIMARY_SPIRIT), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "ATK / DEF:", WS_VISIBLE | WS_CHILD, 26, 214, 80, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "ATK / DEF:", WS_VISIBLE | WS_CHILD, 26, 210, 80, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_atk = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                105, 211, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_ATK), nullptr, nullptr);
+                105, 207, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_ATK), nullptr, nullptr);
             g_app.hwnd_def = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                166, 211, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_DEF), nullptr, nullptr);
+                166, 207, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_DEF), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "2500/2500", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                228, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_BALANCED), nullptr, nullptr);
+                228, 206, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_BALANCED), nullptr, nullptr);
             CreateWindowA("BUTTON", "3200/1800", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                299, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_AGGRO), nullptr, nullptr);
+                299, 206, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_AGGRO), nullptr, nullptr);
             CreateWindowA("BUTTON", "1800/3200", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                370, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_TANK), nullptr, nullptr);
+                370, 206, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_TANK), nullptr, nullptr);
             CreateWindowA("BUTTON", "0/0", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                441, 210, 52, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_VANILLA), nullptr, nullptr);
+                441, 206, 52, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_VANILLA), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Filter Supports:", WS_VISIBLE | WS_CHILD, 26, 246, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Filter Supports:", WS_VISIBLE | WS_CHILD, 26, 240, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_spirit_search = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
-                125, 243, 275, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_SPIRIT_SEARCH), nullptr, nullptr);
+                125, 237, 275, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_SPIRIT_SEARCH), nullptr, nullptr);
             CreateWindowA("BUTTON", "Filter List", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                406, 242, 87, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_SPIRIT_FILTER), nullptr, nullptr);
+                406, 236, 87, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_SPIRIT_FILTER), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Support Slot 1:", WS_VISIBLE | WS_CHILD, 26, 276, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Support Slot 1:", WS_VISIBLE | WS_CHILD, 26, 270, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_sup1 = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 272, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_1), nullptr, nullptr);
+                125, 266, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_1), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Support Slot 2:", WS_VISIBLE | WS_CHILD, 26, 306, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Support Slot 2:", WS_VISIBLE | WS_CHILD, 26, 300, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_sup2 = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 302, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_2), nullptr, nullptr);
+                125, 296, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_2), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Support Slot 3:", WS_VISIBLE | WS_CHILD, 26, 336, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Support Slot 3:", WS_VISIBLE | WS_CHILD, 26, 330, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_sup3 = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 332, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_3), nullptr, nullptr);
+                125, 326, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_3), nullptr, nullptr);
 
             g_app.hwnd_slot_meter = CreateWindowA("STATIC", "Support Slots Used: 0 / 3 (Valid)",
-                WS_VISIBLE | WS_CHILD, 26, 370, 260, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_SLOT_METER), nullptr, nullptr);
+                WS_VISIBLE | WS_CHILD, 26, 366, 260, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_SLOT_METER), nullptr, nullptr);
             CreateWindowA("BUTTON", "Equip Selected Spirits & Stats", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                292, 366, 201, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_APPLY_SPIRITS), nullptr, nullptr);
+                292, 362, 201, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_APPLY_SPIRITS), nullptr, nullptr);
 
-            // --- Group 3: Multi-Hundred Match Combat Simulator ---
-            HWND grp3 = CreateWindowA("BUTTON", "3. SSBU AI Combat Simulator (Multi-Hundred Game Training)",
-                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 414, 490, 176, hwnd, nullptr, nullptr, nullptr);
+            // --- Group 3: GPU-First Combat Simulator ---
+            HWND grp3 = CreateWindowA("BUTTON", "3. GPU-First SSBU AI Combat Simulator (Direct3D 11 CS -> CPU Fallback)",
+                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 408, 490, 184, hwnd, nullptr, nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Sparring Rival:", WS_VISIBLE | WS_CHILD, 26, 438, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Sparring Rival:", WS_VISIBLE | WS_CHILD, 26, 430, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_opponent = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 434, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_OPPONENT), nullptr, nullptr);
+                125, 426, 175, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_OPPONENT), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Opponent Style:", WS_VISIBLE | WS_CHILD, 26, 466, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Device:", WS_VISIBLE | WS_CHILD, 306, 430, 44, 20, hwnd, nullptr, nullptr, nullptr);
+            g_app.hwnd_compute = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
+                352, 426, 141, 200, hwnd, reinterpret_cast<HMENU>(ID_CMB_COMPUTE), nullptr, nullptr);
+
+            CreateWindowA("STATIC", "Opponent Style:", WS_VISIBLE | WS_CHILD, 26, 460, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_archetype = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 462, 175, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_ARCHETYPE), nullptr, nullptr);
+                125, 456, 175, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_ARCHETYPE), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Focus:", WS_VISIBLE | WS_CHILD, 306, 466, 42, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Focus:", WS_VISIBLE | WS_CHILD, 306, 460, 44, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_focus = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                350, 462, 143, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_FOCUS), nullptr, nullptr);
+                352, 456, 141, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_FOCUS), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Match Count:", WS_VISIBLE | WS_CHILD, 26, 498, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Match Count:", WS_VISIBLE | WS_CHILD, 26, 492, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_games = CreateWindowA("EDIT", "500", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                125, 495, 75, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_GAMES), nullptr, nullptr);
+                125, 489, 75, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_GAMES), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "100", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                210, 494, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_100), nullptr, nullptr);
+                210, 488, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_100), nullptr, nullptr);
             CreateWindowA("BUTTON", "500", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                278, 494, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_500), nullptr, nullptr);
+                278, 488, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_500), nullptr, nullptr);
             CreateWindowA("BUTTON", "1,000", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                346, 494, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_1000), nullptr, nullptr);
+                346, 488, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_1000), nullptr, nullptr);
             CreateWindowA("BUTTON", "5,000", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                418, 494, 75, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_5000), nullptr, nullptr);
+                418, 488, 75, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_5000), nullptr, nullptr);
 
-            CreateWindowA("BUTTON", "RUN FULL TRAINING SIMULATION (TRAIN TO LV 50 READY .BIN)",
+            CreateWindowA("BUTTON", "RUN GPU-ACCELERATED TRAINING SIMULATION (LV 50 READY .BIN)",
                 WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                26, 526, 467, 34, hwnd, reinterpret_cast<HMENU>(ID_BTN_TRAIN), nullptr, nullptr);
+                26, 522, 467, 34, hwnd, reinterpret_cast<HMENU>(ID_BTN_TRAIN), nullptr, nullptr);
 
             // --- Group 4: Direct AI Behavior Fine-Tuning ---
             HWND grp4 = CreateWindowA("BUTTON", "4. Direct AI Behavior Fine-Tuning (0 - 100% Weight Overrides)",
-                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 594, 490, 96, hwnd, nullptr, nullptr, nullptr);
+                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 596, 490, 94, hwnd, nullptr, nullptr, nullptr);
 
             CreateWindowA("STATIC", "Offense %:", WS_VISIBLE | WS_CHILD, 26, 618, 68, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_tune_offense = CreateWindowA("EDIT", "50", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
@@ -572,8 +586,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 518, 662, 530, 22, hwnd, reinterpret_cast<HMENU>(ID_PROGRESS), nullptr, nullptr);
             SendMessageA(g_app.hwnd_progress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
 
-            g_app.hwnd_status = CreateWindowA("STATIC",
-                "Ready. All 89 SSBU Fighters, 65+ Primary Spirits, and 190+ Active Support Spirits loaded.",
+            std::string init_status = "Ready. Compute Engine: " + g_app.gpu_info.backend_name +
+                " (" + g_app.gpu_info.adapter_name + ") — GPU First before CPU fallback.";
+            g_app.hwnd_status = CreateWindowA("STATIC", init_status.c_str(),
                 WS_VISIBLE | WS_CHILD, 14, 696, 1034, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_STATUS), nullptr, nullptr);
 
             SetFontForChildren(hwnd, g_app.font_regular);
@@ -593,6 +608,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
             SendMessageA(g_app.hwnd_fighter, CB_SETCURSEL, 0, 0);
             SendMessageA(g_app.hwnd_opponent, CB_SETCURSEL, 7, 0); // Fox default
+
+            // Populate Compute Preference (default: GPU First -> CPU Fallback)
+            SendMessageA(g_app.hwnd_compute, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>("GPU First (Auto)"));
+            SendMessageA(g_app.hwnd_compute, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>("Force GPU (D3D11)"));
+            SendMessageA(g_app.hwnd_compute, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>("Force CPU Only"));
+            SendMessageA(g_app.hwnd_compute, CB_SETCURSEL, 0, 0);
 
             // Populate Primary Spirits
             const auto& primaries = GetPrimarySpiritCatalog();
@@ -770,11 +791,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 TrainingFocus foc = (foc_idx != CB_ERR)
                     ? static_cast<TrainingFocus>(foc_idx) : TrainingFocus::TournamentOptimal;
 
+                LRESULT comp_idx = SendMessageA(g_app.hwnd_compute, CB_GETCURSEL, 0, 0);
+                ComputePreference pref = (comp_idx != CB_ERR)
+                    ? static_cast<ComputePreference>(comp_idx) : ComputePreference::GpuFirstAuto;
+
                 TrainingConfig cfg{};
                 cfg.num_games = num_games;
                 cfg.opponent_char_id = opp_id;
                 cfg.archetype = arch;
                 cfg.focus = foc;
+                cfg.compute_preference = pref;
                 cfg.freeze_learning_after_training = true;
 
                 SendMessageA(g_app.hwnd_progress, PBM_SETPOS, 0, 0);
@@ -791,6 +817,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 log_ss << "====================================================================\n";
                 log_ss << "           SSBU AMIIBO MULTI-MATCH TRAINING REPORT                  \n";
                 log_ss << "====================================================================\n";
+                log_ss << "Compute Backend     : " << sum.compute_backend_used << "\n";
+                log_ss << "Compute Device      : " << sum.compute_adapter_name
+                       << " (" << std::fixed << std::setprecision(2) << sum.compute_elapsed_ms << " ms)\n";
                 log_ss << "Matches Simulated   : " << sum.total_games << "\n";
                 log_ss << "Record (W - L)      : " << sum.wins << " W - " << sum.losses << " L ("
                        << std::fixed << std::setprecision(1) << win_rate << "% Win Rate)\n";
@@ -817,7 +846,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SyncControlsFromBin();
                 char status_buf[256];
                 std::snprintf(status_buf, sizeof(status_buf),
-                    "Completed %d games! Record: %dW-%dL (%.1f%%) | Level %d -> %d | Personality: %s",
+                    "[%s | %.2f ms] %d games: %dW-%dL (%.1f%%) | Lv %d -> %d | Personality: %s",
+                    sum.compute_backend_used.c_str(), sum.compute_elapsed_ms,
                     sum.total_games, sum.wins, sum.losses, win_rate,
                     sum.initial_level, sum.final_level, sum.final_personality.c_str());
                 SetWindowTextA(g_app.hwnd_status, status_buf);
@@ -857,7 +887,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
-    const char CLASS_NAME[] = "SSBUAmiiboTrainerWin32ClassV2";
+    const char CLASS_NAME[] = "SSBUAmiiboTrainerWin32ClassV21";
     WNDCLASSA wc{};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
@@ -868,7 +898,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
 
     HWND hwnd = CreateWindowExA(
         0, CLASS_NAME,
-        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.0 (C++20)",
+        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.1 (GPU-First C++20)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 1075, 765,
         nullptr, nullptr, hInstance, nullptr);

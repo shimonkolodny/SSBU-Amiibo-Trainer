@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SSBUAmiiboTrainer VERSION 2.0.0 LANGUAGES CXX)
+project(SSBUAmiiboTrainer VERSION 2.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,9 +14,16 @@ endif()
 add_library(ssbu_amiibo_core STATIC
     src/ssbu_loadouts.cpp
     src/amiibo_bin.cpp
+    src/gpu_compute.cpp
     src/training_sim.cpp
 )
 target_include_directories(ssbu_amiibo_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if(WIN32)
+    target_link_libraries(ssbu_amiibo_core PUBLIC d3d11 dxgi d3dcompiler)
+else()
+    target_link_libraries(ssbu_amiibo_core PUBLIC ${CMAKE_DL_LIBS})
+endif()
 
 add_executable(ssbu_amiibo_trainer
     src/main.cpp

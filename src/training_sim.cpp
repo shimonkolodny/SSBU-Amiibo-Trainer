@@ -1,5 +1,6 @@
 #include "training_sim.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <random>
 
@@ -36,6 +37,8 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
     const TrainingConfig& config,
     ProgressCallback on_progress) {
 
+    auto t_start = std::chrono::high_resolution_clock::now();
+
     TrainingSummary summary{};
     summary.total_games = std::max(1, config.num_games);
     summary.initial_level = amiibo.GetDisplayedLevel();
@@ -44,6 +47,7 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
 
     AmiiboBehaviorParams beh = amiibo.DecodeBehavior();
     const FighterInfo* my_fighter = FindFighterById(amiibo.GetCharacterId());
+    const FighterInfo* fixed_opp  = FindFighterById(config.opponent_char_id);
     const auto& roster = GetFighterCatalog();
 
     float base_atk_bonus = static_cast<float>(amiibo.GetAttackStat()) / 5000.0f;
@@ -72,6 +76,49 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
         }
     }
 
+    // -----------------------------------------------------------------------
+    // STEP 1: Attempt GPU Compute Shader Execution FIRST (Before CPU Fallback)
+    // -----------------------------------------------------------------------
+    std::vector<GpuMatchOutcome> gpu_outcomes;
+    bool gpu_used = false;
+    GpuDeviceInfo gpu_dev{};
+    double gpu_ms = 0.0;
+
+    if (config.compute_preference != ComputePreference::ForceCpu) {
+        GpuSimParams gpu_params{};
+        gpu_params.num_games = static_cast<uint32_t>(summary.total_games);
+        gpu_params.random_seed = config.random_seed;
+        gpu_params.opponent_cpu_level = static_cast<uint32_t>(config.opponent_cpu_level);
+        gpu_params.is_gauntlet = (config.archetype == OpponentArchetype::FullRosterGauntlet) ? 1u : 0u;
+        gpu_params.my_weight = my_fighter ? my_fighter->weight_class : 1.0f;
+        gpu_params.opp_weight = fixed_opp ? fixed_opp->weight_class : 1.0f;
+        gpu_params.base_atk_bonus = base_atk_bonus;
+        gpu_params.base_def_bonus = base_def_bonus;
+        gpu_params.spirit_combat_bonus = spirit_combat_bonus;
+        gpu_params.spirit_recovery_rate = spirit_recovery_rate;
+        gpu_params.neutral_score = 0.25f * (beh.offensive + beh.grounded + beh.just_shield_master + beh.return_to_cliff);
+        gpu_params.just_shield_prob = std::max(0.35f, beh.just_shield_master);
+        gpu_params.meteor_prob = std::max(0.35f, beh.meteor_master);
+        gpu_params.ko_smash_bonus = (beh.fsmash + beh.usmash) / 40.0f;
+        gpu_params.return_cliff_bonus = beh.return_to_cliff;
+
+        gpu_used = GpuComputeEngine::TryRunMatchBatchOnGpu(
+            gpu_params, gpu_outcomes, &gpu_dev, &gpu_ms, nullptr);
+    }
+
+    if (gpu_used && static_cast<int>(gpu_outcomes.size()) == summary.total_games) {
+        summary.executed_on_gpu = true;
+        summary.compute_backend_used = gpu_dev.backend_name;
+        summary.compute_adapter_name = gpu_dev.adapter_name;
+        summary.compute_elapsed_ms = gpu_ms;
+    } else {
+        summary.executed_on_gpu = false;
+        summary.compute_backend_used = (config.compute_preference == ComputePreference::ForceCpu)
+            ? "CPU Execution (Forced by User)"
+            : "CPU Fallback (After GPU Probe)";
+        summary.compute_adapter_name = "Host Multi-Core CPU";
+    }
+
     std::mt19937 rng(config.random_seed);
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
 
@@ -92,102 +139,121 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
     double sum_taken = 0.0;
 
     for (int g = 0; g < summary.total_games; ++g) {
-        const FighterInfo* opp = FindFighterById(config.opponent_char_id);
+        const FighterInfo* opp = fixed_opp;
         OpponentArchetype arch = config.archetype;
         if (config.archetype == OpponentArchetype::FullRosterGauntlet) {
             opp = &roster[static_cast<size_t>(g) % roster.size()];
             arch = static_cast<OpponentArchetype>((g % 6) + 1);
         }
 
-        float level_factor = static_cast<float>(amiibo.GetDisplayedLevel() - 1) / 49.0f;
-        float cpu_factor   = static_cast<float>(amiibo.GetCpuLevel() - 1) / 8.0f;
-
-        float neutral_score = 0.0f;
-        switch (arch) {
-            case OpponentArchetype::Rushdown:
-                neutral_score = 0.35f * beh.just_shield_master + 0.30f * beh.grounded +
-                                0.20f * beh.feint_counter + 0.15f * (beh.ftilt + beh.dtilt) / 40.0f;
-                break;
-            case OpponentArchetype::Zoner:
-                neutral_score = 0.35f * beh.dash + 0.30f * beh.just_shield_master +
-                                0.20f * beh.feint_shooter + 0.15f * beh.near_range;
-                break;
-            case OpponentArchetype::DefensiveParry:
-                neutral_score = 0.40f * beh.catcher + 0.30f * beh.feint_master +
-                                0.30f * (1.0f - beh.dash_attacker);
-                break;
-            case OpponentArchetype::Grappler:
-                neutral_score = 0.35f * (1.0f - beh.shield_master) + 0.35f * beh.grounded +
-                                0.30f * (beh.fsmash + beh.dtilt) / 40.0f;
-                break;
-            case OpponentArchetype::AerialEdgeguarder:
-                neutral_score = 0.35f * beh.air_offensive + 0.35f * beh.return_to_cliff +
-                                0.30f * beh.just_shield_master;
-                break;
-            default:
-                neutral_score = 0.25f * beh.offensive + 0.25f * beh.grounded +
-                                0.25f * beh.just_shield_master + 0.25f * beh.return_to_cliff;
-                break;
-        }
-
-        float atk_mult = 1.0f + (0.15f + 0.85f * level_factor) * base_atk_bonus;
-        float def_mult = 1.0f + (0.15f + 0.85f * level_factor) * base_def_bonus;
-
         int amiibo_stocks = 3;
         int opp_stocks = 3;
-        float amiibo_pct = 0.0f;
-        float opp_pct = 0.0f;
         float total_dealt = 0.0f;
         float total_taken = 0.0f;
         int parries = 0;
         int meteors = 0;
+        bool won = false;
 
-        float amiibo_power = (0.24f + 0.28f * level_factor + 0.24f * cpu_factor +
-                              0.26f * neutral_score + spirit_combat_bonus * (0.25f + 0.75f * level_factor));
-        float opp_power = 0.42f + 0.042f * static_cast<float>(config.opponent_cpu_level);
+        if (summary.executed_on_gpu) {
+            // Use match combat results computed in parallel on the GPU
+            const auto& gm = gpu_outcomes[static_cast<size_t>(g)];
+            won = (gm.won != 0u);
+            amiibo_stocks = gm.amiibo_stocks;
+            opp_stocks = gm.opp_stocks;
+            total_dealt = gm.damage_dealt;
+            total_taken = gm.damage_taken;
+            parries = static_cast<int>(gm.parries);
+            meteors = static_cast<int>(gm.meteors);
+        } else {
+            // CPU Fallback Simulation Path
+            float level_factor = static_cast<float>(amiibo.GetDisplayedLevel() - 1) / 49.0f;
+            float cpu_factor   = static_cast<float>(amiibo.GetCpuLevel() - 1) / 8.0f;
 
-        for (int exchange = 0; exchange < 55 && amiibo_stocks > 0 && opp_stocks > 0; ++exchange) {
-            float win_prob = amiibo_power / (amiibo_power + opp_power);
-            if (uni(rng) < win_prob) {
-                float hit = (10.5f + 6.5f * uni(rng)) * atk_mult;
-                if (uni(rng) < beh.just_shield_master * 0.45f) {
-                    parries++;
-                    hit *= 1.25f;
+            float neutral_score = 0.0f;
+            switch (arch) {
+                case OpponentArchetype::Rushdown:
+                    neutral_score = 0.35f * beh.just_shield_master + 0.30f * beh.grounded +
+                                    0.20f * beh.feint_counter + 0.15f * (beh.ftilt + beh.dtilt) / 40.0f;
+                    break;
+                case OpponentArchetype::Zoner:
+                    neutral_score = 0.35f * beh.dash + 0.30f * beh.just_shield_master +
+                                    0.20f * beh.feint_shooter + 0.15f * beh.near_range;
+                    break;
+                case OpponentArchetype::DefensiveParry:
+                    neutral_score = 0.40f * beh.catcher + 0.30f * beh.feint_master +
+                                    0.30f * (1.0f - beh.dash_attacker);
+                    break;
+                case OpponentArchetype::Grappler:
+                    neutral_score = 0.35f * (1.0f - beh.shield_master) + 0.35f * beh.grounded +
+                                    0.30f * (beh.fsmash + beh.dtilt) / 40.0f;
+                    break;
+                case OpponentArchetype::AerialEdgeguarder:
+                    neutral_score = 0.35f * beh.air_offensive + 0.35f * beh.return_to_cliff +
+                                    0.30f * beh.just_shield_master;
+                    break;
+                default:
+                    neutral_score = 0.25f * beh.offensive + 0.25f * beh.grounded +
+                                    0.25f * beh.just_shield_master + 0.25f * beh.return_to_cliff;
+                    break;
+            }
+
+            float atk_mult = 1.0f + (0.15f + 0.85f * level_factor) * base_atk_bonus;
+            float def_mult = 1.0f + (0.15f + 0.85f * level_factor) * base_def_bonus;
+
+            float amiibo_pct = 0.0f;
+            float opp_pct = 0.0f;
+
+            float amiibo_power = (0.24f + 0.28f * level_factor + 0.24f * cpu_factor +
+                                  0.26f * neutral_score + spirit_combat_bonus * (0.25f + 0.75f * level_factor));
+            float opp_power = 0.42f + 0.042f * static_cast<float>(config.opponent_cpu_level);
+
+            for (int exchange = 0; exchange < 55 && amiibo_stocks > 0 && opp_stocks > 0; ++exchange) {
+                float win_prob = amiibo_power / (amiibo_power + opp_power);
+                if (uni(rng) < win_prob) {
+                    float hit = (10.5f + 6.5f * uni(rng)) * atk_mult;
+                    if (uni(rng) < beh.just_shield_master * 0.45f) {
+                        parries++;
+                        hit *= 1.25f;
+                    }
+                    opp_pct += hit;
+                    total_dealt += hit;
+                    if (spirit_recovery_rate > 0.0f) {
+                        amiibo_pct = std::max(0.0f, amiibo_pct - hit * spirit_recovery_rate);
+                    }
+                    float ko_threshold = 112.0f * opp->weight_class - 14.0f * (beh.fsmash + beh.usmash) / 40.0f;
+                    if (opp_pct >= ko_threshold) {
+                        if (uni(rng) < beh.meteor_master * 0.5f) meteors++;
+                        opp_stocks--;
+                        opp_pct = 0.0f;
+                    }
+                } else {
+                    float hit = (11.5f + 7.0f * uni(rng)) / std::max(0.5f, def_mult);
+                    amiibo_pct += hit;
+                    total_taken += hit;
+                    float my_ko_thresh = 108.0f * my_fighter->weight_class + 12.0f * beh.return_to_cliff;
+                    if (amiibo_pct >= my_ko_thresh) {
+                        amiibo_stocks--;
+                        amiibo_pct = 0.0f;
+                    }
                 }
-                opp_pct += hit;
-                total_dealt += hit;
-                if (spirit_recovery_rate > 0.0f) {
-                    amiibo_pct = std::max(0.0f, amiibo_pct - hit * spirit_recovery_rate);
-                }
-                float ko_threshold = 112.0f * opp->weight_class - 14.0f * (beh.fsmash + beh.usmash) / 40.0f;
-                if (opp_pct >= ko_threshold) {
-                    if (uni(rng) < beh.meteor_master * 0.5f) meteors++;
-                    opp_stocks--;
-                    opp_pct = 0.0f;
-                }
+            }
+
+            won = (amiibo_stocks > opp_stocks) ||
+                  (amiibo_stocks == opp_stocks && amiibo_pct <= opp_pct);
+            if (won) {
+                if (opp_stocks > 0) opp_stocks = 0;
+                if (amiibo_stocks == 0) amiibo_stocks = 1;
             } else {
-                float hit = (11.5f + 7.0f * uni(rng)) / std::max(0.5f, def_mult);
-                amiibo_pct += hit;
-                total_taken += hit;
-                float my_ko_thresh = 108.0f * my_fighter->weight_class + 12.0f * beh.return_to_cliff;
-                if (amiibo_pct >= my_ko_thresh) {
-                    amiibo_stocks--;
-                    amiibo_pct = 0.0f;
-                }
+                if (amiibo_stocks > 0) amiibo_stocks = 0;
+                if (opp_stocks == 0) opp_stocks = 1;
             }
         }
 
-        bool won = (amiibo_stocks > opp_stocks) ||
-                   (amiibo_stocks == opp_stocks && amiibo_pct <= opp_pct);
         if (won) {
-            if (opp_stocks > 0) opp_stocks = 0;
-            if (amiibo_stocks == 0) amiibo_stocks = 1;
             summary.wins++;
             if (g < q1_count) q1_wins++;
             if (g >= summary.total_games - q1_count) q4_wins++;
         } else {
-            if (amiibo_stocks > 0) amiibo_stocks = 0;
-            if (opp_stocks == 0) opp_stocks = 1;
             summary.losses++;
         }
 
@@ -379,6 +445,11 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
     }
     amiibo.SetGiftCount(static_cast<uint16_t>(std::min<int>(65535, amiibo.GetGiftCount() + summary.wins)));
     amiibo.EncodeBehavior(beh);
+
+    if (!summary.executed_on_gpu) {
+        auto t_end = std::chrono::high_resolution_clock::now();
+        summary.compute_elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+    }
 
     summary.first_quarter_win_rate = static_cast<float>(q1_wins) / static_cast<float>(q1_count);
     summary.final_quarter_win_rate = static_cast<float>(q4_wins) / static_cast<float>(q1_count);

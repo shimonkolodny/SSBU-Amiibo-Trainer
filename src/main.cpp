@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "amiibo_bin.hpp"
+#include "gpu_compute.hpp"
 #include "ssbu_loadouts.hpp"
 #include "training_sim.hpp"
 
@@ -23,7 +24,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow);
 namespace {
 
 void PrintUsage(const char* prog) {
-    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.0\n"
+    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.1 (GPU-First)\n"
               << "Usage:\n"
               << "  " << prog << " --gui                        Launch native Windows GUI (default on Windows)\n"
               << "  " << prog << " [options]                    Run headless CLI training & spirit customization\n\n"
@@ -31,6 +32,8 @@ void PrintUsage(const char* prog) {
               << "  --in <path>                  Input 540-byte Amiibo .bin file (or create new if omitted)\n"
               << "  --out <path>                 Output trained 540-byte Amiibo .bin file\n"
               << "  --keys <path>                Optional 160-byte key_retail.bin for NTAG215 AES-128-CTR decrypt/encrypt\n"
+              << "  --backend <auto|gpu|cpu>     Compute backend preference (default: auto = GPU First -> CPU Fallback)\n"
+              << "  --gpu-info                   Probe and print GPU compute device capabilities\n"
               << "  --fighter <id_or_name>       Amiibo fighter ID (e.g. 0x0000) or name (e.g. \"Mario\", \"Kazuya\")\n"
               << "  --opponent <id_or_name>      Sparring opponent fighter ID or name (default: Fox)\n"
               << "  --games <N>                  Number of matches to simulate (default: 500)\n"
@@ -44,6 +47,12 @@ void PrintUsage(const char* prog) {
               << "  --list-primaries             List Primary Spirit presets\n"
               << "  --list-fighters              List all 89 SSBU playable fighters & character IDs\n"
               << "  --inspect                    Print detailed Amiibo diagnostic report\n";
+}
+
+ssbu::ComputePreference ParseBackendPref(const std::string& s) {
+    if (s == "gpu" || s == "d3d11" || s == "opencl") return ssbu::ComputePreference::ForceGpu;
+    if (s == "cpu") return ssbu::ComputePreference::ForceCpu;
+    return ssbu::ComputePreference::GpuFirstAuto;
 }
 
 ssbu::OpponentArchetype ParseArchetype(const std::string& s) {
@@ -76,8 +85,10 @@ uint16_t ResolveFighterArg(const std::string& arg) {
 
 void PrintDiagnosticSummary(const ssbu::AmiiboBin& bin) {
     const auto* f = ssbu::FindFighterById(bin.GetCharacterId());
+    auto gpu = ssbu::GpuComputeEngine::ProbeGpuDevice();
     std::cout << "=== SSBU Amiibo Diagnostic Summary ===\n"
               << "  Format Status   : " << bin.GetFormatStatusString() << "\n"
+              << "  Compute Probe   : " << gpu.backend_name << " (" << gpu.adapter_name << ")\n"
               << "  Fighter         : " << (f ? f->name : "Unknown")
               << " (0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
               << bin.GetCharacterId() << std::dec << std::setfill(' ') << ")\n"
@@ -108,6 +119,7 @@ int main(int argc, char** argv) {
     std::string in_path;
     std::string out_path;
     std::string keys_path;
+    std::string backend_str = "auto";
     std::string fighter_arg = "Mario";
     std::string opponent_arg = "Fox";
     int num_games = 500;
@@ -123,6 +135,15 @@ int main(int argc, char** argv) {
         std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
             PrintUsage(argv[0]);
+            return 0;
+        } else if (arg == "--gpu-info") {
+            auto info = ssbu::GpuComputeEngine::ProbeGpuDevice();
+            std::cout << "=== SSBU Amiibo Trainer GPU Compute Probe ===\n"
+                      << "  GPU Available   : " << (info.gpu_available ? "YES" : "NO (CPU Fallback Active)") << "\n"
+                      << "  Hardware GPU    : " << (info.is_hardware_gpu ? "YES (Dedicated/Integrated)" : "NO") << "\n"
+                      << "  Compute Backend : " << info.backend_name << "\n"
+                      << "  Adapter Name    : " << info.adapter_name << "\n"
+                      << "  Dedicated VRAM  : " << info.dedicated_vram_mb << " MB\n";
             return 0;
         } else if (arg == "--list-fighters") {
             std::cout << "=== Super Smash Bros. Ultimate Complete Fighter Roster ("
@@ -164,6 +185,8 @@ int main(int argc, char** argv) {
             out_path = argv[++i];
         } else if (arg == "--keys" && i + 1 < argc) {
             keys_path = argv[++i];
+        } else if (arg == "--backend" && i + 1 < argc) {
+            backend_str = argv[++i];
         } else if (arg == "--fighter" && i + 1 < argc) {
             fighter_arg = argv[++i];
         } else if (arg == "--opponent" && i + 1 < argc) {
@@ -250,12 +273,15 @@ int main(int argc, char** argv) {
         cfg.opponent_char_id = opp_id;
         cfg.archetype = ParseArchetype(archetype_str);
         cfg.focus = ParseFocus(focus_str);
+        cfg.compute_preference = ParseBackendPref(backend_str);
         cfg.freeze_learning_after_training = true;
 
         ssbu::TrainingSummary sum = ssbu::TrainingSimulator::RunTrainingSession(bin, cfg);
         float win_rate = (sum.total_games > 0)
             ? (100.0f * static_cast<float>(sum.wins) / static_cast<float>(sum.total_games)) : 0.0f;
         std::cout << "=== SSBU Amiibo Training Complete ===\n"
+                  << "Compute Backend : " << sum.compute_backend_used << " (" << sum.compute_adapter_name << ")\n"
+                  << "Compute Time    : " << std::fixed << std::setprecision(2) << sum.compute_elapsed_ms << " ms\n"
                   << "Games Simulated : " << sum.total_games << "\n"
                   << "Win / Loss      : " << sum.wins << "W - " << sum.losses << "L ("
                   << std::fixed << std::setprecision(1) << win_rate << "%)\n"
