@@ -7,25 +7,26 @@ namespace ssbu {
 
 const char* TrainingSimulator::ArchetypeToString(OpponentArchetype a) {
     switch (a) {
+        case OpponentArchetype::FullRosterGauntlet: return "Full 89-Fighter Roster Gauntlet";
         case OpponentArchetype::Balanced:           return "Balanced All-Rounder";
         case OpponentArchetype::Rushdown:           return "Rushdown / Frame-Trap";
         case OpponentArchetype::Zoner:              return "Zoner / Projectile Wall";
         case OpponentArchetype::DefensiveParry:     return "Defensive Shield & Parry";
         case OpponentArchetype::Grappler:           return "Grappler / Command Grab";
         case OpponentArchetype::AerialEdgeguarder:  return "Aerial Juggler & Edgeguarder";
-        case OpponentArchetype::FullRosterGauntlet: return "Full Roster Gauntlet (All 89 Styles)";
-        default:                                    return "Balanced All-Rounder";
+        default:                                    return "Full 89-Fighter Roster Gauntlet";
     }
 }
 
 const char* TrainingSimulator::FocusToString(TrainingFocus f) {
     switch (f) {
         case TrainingFocus::TournamentOptimal:       return "Tournament Optimal (Grounded + Parry)";
-        case TrainingFocus::AggressiveStageControl:  return "Aggressive Stage Control";
-        case TrainingFocus::ParryAndPunishMaster:    return "Parry & Punish Master (Ace)";
-        case TrainingFocus::AerialMeteorEdgeguarder: return "Aerial & Meteor Edgeguarder (Daredevil)";
-        case TrainingFocus::ShowOffEntertainer:      return "Show-Off / Taunt Entertainer";
-        case TrainingFocus::AdaptiveCounterplay:     return "Adaptive Matchup Counterplay";
+        case TrainingFocus::AggressiveStageControl:  return "Aggressive Stage Control (Reckless)";
+        case TrainingFocus::ParryAndPunishMaster:    return "Parry & Punish Master (Technician / Ace)";
+        case TrainingFocus::AerialMeteorEdgeguarder: return "Aerial & Meteor Edgeguarder (Unstoppable)";
+        case TrainingFocus::ShowOffEntertainer:      return "Show-Off / Taunt Entertainer (Flashy)";
+        case TrainingFocus::AdaptiveCounterplay:     return "Adaptive Matchup Counterplay (Dynamic)";
+        case TrainingFocus::HeavyArmorSmashBrawler:  return "Heavy Armor Smash Brawler (Unflappable)";
         default:                                     return "Tournament Optimal";
     }
 }
@@ -84,15 +85,18 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
 
     float xp_f = static_cast<float>(amiibo.GetLevelExperience());
     float cpu_xp_f = static_cast<float>(amiibo.GetCpuExperience());
-    const float xp_step_base = std::max(8.0f, (3912.0f - xp_f) / static_cast<float>( std::max(1, summary.total_games * 3 / 4)));
+    const float xp_step_base = std::max(8.0f, (3912.0f - xp_f) / static_cast<float>(std::max(1, summary.total_games * 3 / 4)));
     const float cpu_step_base = std::max(6.0f, (2765.0f - cpu_xp_f) / static_cast<float>(std::max(1, summary.total_games * 3 / 4)));
+
+    double sum_dealt = 0.0;
+    double sum_taken = 0.0;
 
     for (int g = 0; g < summary.total_games; ++g) {
         const FighterInfo* opp = FindFighterById(config.opponent_char_id);
         OpponentArchetype arch = config.archetype;
         if (config.archetype == OpponentArchetype::FullRosterGauntlet) {
             opp = &roster[static_cast<size_t>(g) % roster.size()];
-            arch = static_cast<OpponentArchetype>(g % 6);
+            arch = static_cast<OpponentArchetype>((g % 6) + 1);
         }
 
         float level_factor = static_cast<float>(amiibo.GetDisplayedLevel() - 1) / 49.0f;
@@ -187,6 +191,11 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
             summary.losses++;
         }
 
+        sum_dealt += total_dealt;
+        sum_taken += total_taken;
+        summary.total_parries += parries;
+        summary.total_meteors += meteors;
+
         xp_f = std::min(3912.0f, xp_f + xp_step_base * (won ? 1.15f : 0.90f));
         cpu_xp_f = std::min(2765.0f, cpu_xp_f + cpu_step_base * (won ? 1.15f : 0.90f));
         if (g == summary.total_games - 1 && summary.total_games >= 50) {
@@ -248,80 +257,107 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
                 break;
 
             case TrainingFocus::AggressiveStageControl:
-                nudge(beh.near_range,       0.86f);
-                nudge(beh.offensive,        0.90f);
+                nudge(beh.near_range,       0.88f);
+                nudge(beh.offensive,        0.92f);
                 nudge(beh.dash,             0.68f);
-                nudge(beh.dash_attacker,    0.62f);
-                nudge(beh.air_offensive,    0.82f);
+                nudge(beh.dash_attacker,    0.65f);
+                nudge(beh.air_offensive,    0.85f);
                 nudge(beh.attack_out_cliff, 0.65f);
-                nudge(beh.meteor_master,    0.62f);
-                nudge(beh.feint_shooter,    0.15f);
-                nudge(beh.appeal,           0.02f);
+                nudge(beh.meteor_master,    0.68f);
+                nudge(beh.feint_shooter,    0.10f);
+                nudge(beh.item_collector,   0.10f);
+                nudge(beh.appeal,           0.01f);
                 break;
 
             case TrainingFocus::ParryAndPunishMaster:
                 nudge(beh.just_shield_master,  0.94f);
-                nudge(beh.feint_master,        0.84f);
-                nudge(beh.feint_counter,       0.84f);
-                nudge(beh.feint_shooter,       0.80f);
-                nudge(beh.catcher,             0.80f);
-                nudge(beh.attack_cancel,       0.78f);
-                nudge(beh.shield_catch_master, 0.72f);
-                nudge(beh.shield_master,       0.78f);
-                nudge(beh.meteor_master,       0.78f);
-                nudge(beh.attack_out_cliff,    0.78f);
-                nudge(beh.air_offensive,       0.18f);
+                nudge(beh.feint_master,        0.86f);
+                nudge(beh.feint_counter,       0.86f);
+                nudge(beh.feint_shooter,       0.84f);
+                nudge(beh.catcher,             0.84f);
+                nudge(beh.attack_cancel,       0.80f);
+                nudge(beh.shield_catch_master, 0.78f);
+                nudge(beh.shield_master,       0.82f);
+                nudge(beh.meteor_master,       0.80f);
+                nudge(beh.attack_out_cliff,    0.80f);
+                nudge(beh.air_offensive,       0.15f);
+                nudge(beh.item_collector,      0.80f);
                 nudge(beh.appeal,              0.01f);
                 break;
 
             case TrainingFocus::AerialMeteorEdgeguarder:
-                nudge(beh.attack_out_cliff, 0.92f);
-                nudge(beh.meteor_master,    0.92f);
-                nudge(beh.air_offensive,    0.88f);
-                nudge(beh.near_range,       0.75f);
-                nudge(beh.offensive,        0.84f);
-                nudge(beh.grounded,         0.20f);
-                nudge(beh.cliffer,          0.78f);
+                nudge(beh.attack_out_cliff, 0.94f);
+                nudge(beh.meteor_master,    0.94f);
+                nudge(beh.air_offensive,    0.90f);
+                nudge(beh.near_range,       0.78f);
+                nudge(beh.offensive,        0.86f);
+                nudge(beh.grounded,         0.18f);
+                nudge(beh.cliffer,          0.82f);
+                nudge(beh.dash_attacker,    0.65f);
+                nudge(beh.critical_hitter,  0.65f);
                 nudge_pct(beh.dair,         32.0f);
                 nudge_pct(beh.fair,         28.0f);
                 nudge_pct(beh.bair,         22.0f);
                 break;
 
             case TrainingFocus::ShowOffEntertainer:
-                nudge(beh.appeal,              0.92f);
-                nudge(beh.attack_out_cliff,    0.82f);
-                nudge(beh.meteor_master,       0.82f);
-                nudge(beh.just_shield_master,  0.80f);
-                nudge(beh.dragoon_collector,   0.75f);
-                nudge(beh.smashball_collector, 0.75f);
-                nudge(beh.hammer_collector,    0.75f);
-                nudge(beh.special_flagger,     0.80f);
-                nudge(beh.homerun_batter,      0.80f);
+                nudge(beh.appeal,              0.94f);
+                nudge(beh.attack_out_cliff,    0.84f);
+                nudge(beh.meteor_master,       0.84f);
+                nudge(beh.just_shield_master,  0.84f);
+                nudge(beh.dragoon_collector,   0.80f);
+                nudge(beh.smashball_collector, 0.80f);
+                nudge(beh.hammer_collector,    0.80f);
+                nudge(beh.special_flagger,     0.85f);
+                nudge(beh.homerun_batter,      0.85f);
+                nudge(beh.club_swinger,        0.80f);
+                nudge(beh.death_swinger,       0.80f);
+                nudge(beh.item_throw_to_target,0.10f);
                 break;
 
             case TrainingFocus::AdaptiveCounterplay:
-                if (arch == OpponentArchetype::Zoner) {
-                    nudge(beh.dash, 0.82f);
-                    nudge(beh.just_shield_master, 0.85f);
-                    nudge(beh.feint_shooter, 0.80f);
-                } else if (arch == OpponentArchetype::Grappler) {
-                    nudge(beh.shield_master, 0.18f);
-                    nudge(beh.grounded, 0.75f);
-                    nudge(beh.feint_master, 0.78f);
-                } else {
-                    nudge(beh.offensive, 0.72f);
-                    nudge(beh.just_shield_master, 0.80f);
-                    nudge(beh.return_to_cliff, 0.85f);
-                }
+                nudge(beh.offensive,           0.84f);
+                nudge(beh.air_offensive,       0.84f);
+                nudge(beh.smash_holder,        0.84f);
+                nudge(beh.dash_attacker,       0.84f);
+                nudge(beh.critical_hitter,     0.88f);
+                nudge(beh.meteor_master,       0.82f);
+                nudge(beh.shield_master,       0.82f);
+                nudge(beh.just_shield_master,  0.15f);
+                nudge(beh.charger,             0.84f);
+                nudge(beh.homerun_batter,      0.80f);
+                nudge(beh.club_swinger,        0.80f);
+                nudge(beh.death_swinger,       0.80f);
+                break;
+
+            case TrainingFocus::HeavyArmorSmashBrawler:
+                nudge(beh.offensive,           0.15f);
+                nudge(beh.grounded,            0.92f);
+                nudge(beh.attack_out_cliff,    0.15f);
+                nudge(beh.dash,                0.15f);
+                nudge(beh.cliffer,             0.15f);
+                nudge(beh.shield_master,       0.92f);
+                nudge(beh.shield_catch_master, 0.80f);
+                nudge(beh.smash_holder,        0.75f);
+                nudge_pct(beh.fsmash,          28.0f);
+                nudge_pct(beh.usmash,          20.0f);
+                nudge_pct(beh.dsmash,          18.0f);
                 break;
         }
 
         beh.NormalizeMoveSums();
 
-        if (summary.sample_matches.size() < 10 || g == summary.total_games - 1) {
+        if (summary.sample_matches.size() < 12 || g >= summary.total_games - 5) {
             summary.sample_matches.push_back({
-                g + 1, won, amiibo_stocks, opp_stocks,
-                total_dealt, total_taken, parries, meteors
+                g + 1,
+                opp->name,
+                won,
+                amiibo_stocks,
+                opp_stocks,
+                total_dealt,
+                total_taken,
+                parries,
+                meteors
             });
         }
 
@@ -332,17 +368,22 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
         recent_outcomes.push_back(won ? 1 : 0);
         rolling_wins += (won ? 1 : 0);
 
-        if (on_progress && ((g + 1) % std::max(1, summary.total_games / 20) == 0 || g + 1 == summary.total_games)) {
-            float rwr = static_cast<float>(rolling_wins) / static_cast<float>(recent_outcomes.size());
-            on_progress(g + 1, summary.total_games, rwr);
+        if (on_progress && ((g + 1) % 10 == 0 || g == summary.total_games - 1)) {
+            float r_wr = static_cast<float>(rolling_wins) / static_cast<float>(recent_outcomes.size());
+            on_progress(g + 1, summary.total_games, r_wr);
         }
     }
 
+    if (config.freeze_learning_after_training) {
+        amiibo.SetLearningEnabled(false);
+    }
     amiibo.SetGiftCount(static_cast<uint16_t>(std::min<int>(65535, amiibo.GetGiftCount() + summary.wins)));
     amiibo.EncodeBehavior(beh);
 
     summary.first_quarter_win_rate = static_cast<float>(q1_wins) / static_cast<float>(q1_count);
     summary.final_quarter_win_rate = static_cast<float>(q4_wins) / static_cast<float>(q1_count);
+    summary.avg_damage_dealt = static_cast<float>(sum_dealt / summary.total_games);
+    summary.avg_damage_taken = static_cast<float>(sum_taken / summary.total_games);
     summary.final_level = amiibo.GetDisplayedLevel();
     summary.final_cpu_level = amiibo.GetCpuLevel();
     summary.final_personality = amiibo.EvaluatePersonality();

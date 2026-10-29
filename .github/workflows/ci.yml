@@ -1,4 +1,4 @@
-name: Build and Test SSBU Amiibo Trainer
+name: Build & Test SSBU Amiibo Trainer
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  build-windows-and-linux:
     strategy:
       fail-fast: false
       matrix:
@@ -17,35 +17,35 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build C++ Application & Tests
+      - name: Build Binaries
         run: cmake --build build --config Release
 
-      - name: Run CTest Unit & 500-Match Simulation Suite
+      - name: Run Unit & 500-Game Training Integration Tests
         working-directory: build
-        run: ctest -C Release --output-on-failure
+        run: ctest -C Release --output-on-failure --verbose
 
-      - name: Run End-to-End CLI Training & Spirit Verification
+      - name: Run End-to-End CLI Training Verification (500 Games + Spirits)
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            ./build/Release/ssbu_amiibo_trainer.exe --generate "Bowser" --primary-spirit "Bowser (Wedding)" --slot1 "Additional Midair Jump" --slot2 "Landing Lag Down" --games 500 --focus 0 --output trained_bowser.bin
-            ./build/Release/ssbu_amiibo_trainer.exe --input trained_bowser.bin --inspect
+            ./build/Release/ssbu_amiibo_trainer.exe --fighter "Sephiroth" --opponent "Kazuya" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
+            ./build/Release/ssbu_amiibo_trainer.exe --in trained_sephiroth_lv50.bin --inspect
           else
-            ./build/ssbu_amiibo_trainer --generate "Bowser" --primary-spirit "Bowser (Wedding)" --slot1 "Additional Midair Jump" --slot2 "Landing Lag Down" --games 500 --focus 0 --output trained_bowser.bin
-            ./build/ssbu_amiibo_trainer --input trained_bowser.bin --inspect
+            ./build/ssbu_amiibo_trainer --fighter "Sephiroth" --opponent "Kazuya" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
+            ./build/ssbu_amiibo_trainer --in trained_sephiroth_lv50.bin --inspect
           fi
         shell: bash
 
-      - name: Upload Windows Executable & Trained Sample .bin Artifact
-        if: runner.os == 'Windows'
+      - name: Upload Windows Executable & Sample Trained Amiibo Artifact
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: SSBU-Amiibo-Trainer-Windows-x64
           path: |
             build/Release/ssbu_amiibo_trainer.exe
-            trained_bowser.bin
+            trained_sephiroth_lv50.bin
