@@ -23,6 +23,34 @@ constexpr uint16_t kCpuXpTable[9] = {
 };
 
 // ---------------------------------------------------------------------------
+// CRC-16-CCITT (0x1021, init 0x0000) for 96-byte 3DS/WiiU/Switch Mii StoreData
+// & IEEE 802.3 CRC-32 for Amiibo Application Data
+// ---------------------------------------------------------------------------
+static uint16_t ComputeCrc16Ccitt(const uint8_t* bytes, size_t len) {
+    uint16_t crc = 0x0000;
+    for (size_t i = 0; i < len; ++i) {
+        crc ^= static_cast<uint16_t>(bytes[i]) << 8;
+        for (int b = 0; b < 8; ++b) {
+            if (crc & 0x8000) crc = static_cast<uint16_t>((crc << 1) ^ 0x1021);
+            else              crc = static_cast<uint16_t>(crc << 1);
+        }
+    }
+    return crc;
+}
+
+static uint32_t ComputeCrc32(const uint8_t* bytes, size_t len) {
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; ++i) {
+        crc ^= bytes[i];
+        for (int b = 0; b < 8; ++b) {
+            if (crc & 1u) crc = (crc >> 1) ^ 0xEDB88320u;
+            else          crc >>= 1;
+        }
+    }
+    return ~crc;
+}
+
+// ---------------------------------------------------------------------------
 // Portable SHA-256 & HMAC-SHA256
 // ---------------------------------------------------------------------------
 struct Sha256Ctx {
@@ -441,8 +469,13 @@ void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
     data_[0x1DA] = 0xF6;
     data_[0x1DB] = 0x88;
 
-    // Flags (0x02C = 0x30: initialized + appdata present)
+    // Flags (0x02C = 0x30: bit 4 User Settings/Mii initialized + bit 5 AppData initialized)
     data_[0x02C] = 0x30;
+    data_[0x02D] = 0x31; // Country Code: North America / US
+
+    // Super Smash Bros. Ultimate 64-bit Program/Title ID (0x01006A800016E000) at 0x0AC..0x0B3
+    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x00, 0x16, 0xE0, 0x00};
+    std::memcpy(data_.data() + 0x0AC, kSsbuTitleId, 8);
 
     // SSBU App Access ID (0x34F80200) at 0x0B6..0x0B9 in Internal Format
     data_[0x0B6] = 0x34;
@@ -469,6 +502,9 @@ void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
     SetSpiritType(SpiritType::Neutral);
     SetStats(0, 0, true);
     SetSpiritSlots(0, 0, 0, false);
+
+    const auto* fighter = FindFighterById(char_id);
+    AutoPairOwnerMii("SwitchMii", fighter ? fighter->name : "Amiibo");
 
     AmiiboBehaviorParams defaults{};
     EncodeBehavior(defaults);
@@ -514,6 +550,7 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
         else SetCharacterId(cid_intl);
         was_loaded_encrypted_ = false;
         loaded_as_tag_layout_ = false;
+        EnsureOwnerMiiPaired();
         return true;
     }
 
@@ -530,6 +567,7 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
             SetCharacterId(cid);
             was_loaded_encrypted_ = true;
             loaded_as_tag_layout_ = true;
+            EnsureOwnerMiiPaired();
             return true;
         }
     }
@@ -544,6 +582,7 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
         SetCharacterId(cid);
         was_loaded_encrypted_ = false;
         loaded_as_tag_layout_ = true;
+        EnsureOwnerMiiPaired();
         return true;
     }
 
@@ -553,6 +592,7 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
     std::memcpy(data_.data() + 0x1D4, buf.data() + 0x000, 8);
     std::memcpy(data_.data() + 0x1DC, buf.data() + 0x054, 0x2C);
     SetCharacterId(tag_char_id);
+    EnsureOwnerMiiPaired();
     loaded_as_tag_layout_ = true;
     return true;
 }
@@ -612,6 +652,145 @@ std::string AmiiboBin::GetFormatStatusString() const {
     return oss.str();
 }
 
+bool AmiiboBin::HasOwnerMii() const {
+    if ((data_[0x02C] & 0x10) == 0) return false;
+    bool non_zero = false;
+    for (size_t i = 0x04C; i < 0x0AA; ++i) {
+        if (data_[i] != 0) {
+            non_zero = true;
+            break;
+        }
+    }
+    return non_zero && VerifyOwnerMiiCrc16();
+}
+
+uint16_t AmiiboBin::GetOwnerMiiCrc16() const {
+    return (static_cast<uint16_t>(data_[0x0AA]) << 8) | data_[0x0AB];
+}
+
+bool AmiiboBin::VerifyOwnerMiiCrc16() const {
+    uint16_t expected = ComputeCrc16Ccitt(data_.data() + 0x04C, 94);
+    return GetOwnerMiiCrc16() == expected && expected != 0;
+}
+
+std::string AmiiboBin::GetAmiiboNickname() const {
+    std::string out;
+    for (size_t i = 0; i < 10; ++i) {
+        uint16_t ch = (static_cast<uint16_t>(data_[0x038 + i * 2]) << 8) |
+                      data_[0x038 + i * 2 + 1];
+        if (ch == 0) break;
+        out.push_back((ch < 128) ? static_cast<char>(ch) : '?');
+    }
+    return out;
+}
+
+void AmiiboBin::SetAmiiboNickname(const std::string& nickname) {
+    std::memset(data_.data() + 0x038, 0, 20);
+    size_t n = std::min<size_t>(10, nickname.size());
+    for (size_t i = 0; i < n; ++i) {
+        uint16_t ch = static_cast<unsigned char>(nickname[i]);
+        data_[0x038 + i * 2]     = static_cast<uint8_t>((ch >> 8) & 0xFF);
+        data_[0x038 + i * 2 + 1] = static_cast<uint8_t>(ch & 0xFF);
+    }
+    data_[0x02C] |= 0x10;
+}
+
+std::string AmiiboBin::GetOwnerMiiName() const {
+    std::string out;
+    // In 96-byte 3DS/WiiU/Switch FFLStoreData (0x04C..0x0AB), Mii Name is UTF-16LE at offset +0x1A (0x066..0x079)
+    for (size_t i = 0; i < 10; ++i) {
+        uint16_t ch = static_cast<uint16_t>(data_[0x066 + i * 2]) |
+                      (static_cast<uint16_t>(data_[0x066 + i * 2 + 1]) << 8);
+        if (ch == 0) break;
+        out.push_back((ch < 128) ? static_cast<char>(ch) : '?');
+    }
+    return out;
+}
+
+void AmiiboBin::SetOwnerMiiName(const std::string& mii_name) {
+    std::string clean = mii_name.empty() ? "SwitchMii" : mii_name;
+    // Write UTF-16LE Mii Name at 0x066..0x079 and Creator Name at 0x094..0x0A7
+    std::memset(data_.data() + 0x066, 0, 20);
+    std::memset(data_.data() + 0x094, 0, 20);
+    size_t n = std::min<size_t>(10, clean.size());
+    for (size_t i = 0; i < n; ++i) {
+        uint16_t ch = static_cast<unsigned char>(clean[i]);
+        data_[0x066 + i * 2]     = static_cast<uint8_t>(ch & 0xFF);
+        data_[0x066 + i * 2 + 1] = static_cast<uint8_t>((ch >> 8) & 0xFF);
+        data_[0x094 + i * 2]     = static_cast<uint8_t>(ch & 0xFF);
+        data_[0x094 + i * 2 + 1] = static_cast<uint8_t>((ch >> 8) & 0xFF);
+    }
+    // Clear padding at 0x0A8..0x0A9 and recompute CRC-16-CCITT at 0x0AA..0x0AB
+    data_[0x0A8] = 0x00;
+    data_[0x0A9] = 0x00;
+    uint16_t crc = ComputeCrc16Ccitt(data_.data() + 0x04C, 94);
+    data_[0x0AA] = static_cast<uint8_t>((crc >> 8) & 0xFF);
+    data_[0x0AB] = static_cast<uint8_t>(crc & 0xFF);
+    data_[0x02C] |= 0x10;
+}
+
+void AmiiboBin::AutoPairOwnerMii(const std::string& mii_name, const std::string& nickname) {
+    // 1. Set Settings Flags (0x10 = Owner Mii/Nickname registered, 0x20 = AppData initialized) & Country Code
+    data_[0x02C] |= 0x30;
+    if (data_[0x02D] == 0) data_[0x02D] = 0x31; // US/NA
+
+    // 2. Set Setup Date (0x030..0x031) & Last Write Date (0x032..0x033): 2026-10-29 -> ((26 << 9) | (10 << 5) | 29) = 0x355D
+    data_[0x030] = 0x35; data_[0x031] = 0x5D;
+    data_[0x032] = 0x35; data_[0x033] = 0x5D;
+
+    // 3. Populate canonical 96-byte 3DS/WiiU/Switch FFLStoreData Mii structure at 0x04C..0x0AB
+    uint8_t* mii = data_.data() + 0x04C;
+    std::memset(mii, 0, 96);
+    mii[0x00] = 0x03; // Mii format version 3 (3DS/WiiU/Switch compatible)
+    mii[0x01] = 0x00; // Copyable, profanity=0, region lock=0
+    mii[0x02] = 0x10; // Page/Slot index
+    mii[0x03] = 0x30; // Device version
+    // 8-byte System ID (0x04..0x0B)
+    const uint8_t sys_id[8] = {0x53, 0x53, 0x42, 0x55, 0x4D, 0x49, 0x49, 0x01};
+    std::memcpy(mii + 0x04, sys_id, 8);
+    // 4-byte Mii Creation ID (0x0C..0x0F, bit 7 set = normal non-special Mii)
+    mii[0x0C] = 0x94; mii[0x0D] = 0x2A; mii[0x0E] = 0x71; mii[0x0F] = 0x05;
+    // 6-byte Creator MAC Address (0x10..0x15)
+    const uint8_t mac[6] = {0x40, 0xF4, 0x07, 0xA1, 0xB2, 0xC3};
+    std::memcpy(mii + 0x10, mac, 6);
+    // 2-byte Birthday/Gender/FavoriteColor bitfield (0x18..0x19: Male, Red shirt, Mingle on)
+    mii[0x18] = 0x04; mii[0x19] = 0x00;
+    // Default valid facial features (0x2E..0x47: height=64, build=64, normal hair/eyes/nose/mouth)
+    mii[0x2E] = 64;   // Height
+    mii[0x2F] = 64;   // Build
+    mii[0x30] = 0x00; mii[0x31] = 0x00; // Face shape/color
+    mii[0x32] = 0x21; mii[0x33] = 0x01; // Normal hairstyle & dark brown color
+    mii[0x34] = 0x02; mii[0x35] = 0x44; mii[0x36] = 0x10; mii[0x37] = 0x43; // Eyes
+    mii[0x38] = 0x06; mii[0x39] = 0x44; mii[0x3A] = 0x12; mii[0x3B] = 0x43; // Eyebrows
+    mii[0x3C] = 0x01; mii[0x3D] = 0x48; // Nose
+    mii[0x3E] = 0x17; mii[0x3F] = 0x28; mii[0x40] = 0x43; // Mouth
+    mii[0x41] = 0x00; mii[0x42] = 0x00; mii[0x43] = 0x08; // Mustache/Beard/Glasses
+
+    SetOwnerMiiName(mii_name);
+
+    std::string nick = nickname;
+    if (nick.empty()) {
+        const auto* f = FindFighterById(GetCharacterId());
+        nick = f ? f->name : "Amiibo";
+    }
+    SetAmiiboNickname(nick);
+
+    // Ensure SSBU Title ID (0x01006A800016E000) is set at 0x0AC..0x0B3
+    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x00, 0x16, 0xE0, 0x00};
+    std::memcpy(data_.data() + 0x0AC, kSsbuTitleId, 8);
+}
+
+void AmiiboBin::EnsureOwnerMiiPaired() {
+    if (!HasOwnerMii()) {
+        std::string existing_nick = GetAmiiboNickname();
+        std::string existing_mii  = GetOwnerMiiName();
+        AutoPairOwnerMii(existing_mii.empty() ? "SwitchMii" : existing_mii, existing_nick);
+    } else if (GetAmiiboNickname().empty()) {
+        const auto* f = FindFighterById(GetCharacterId());
+        SetAmiiboNickname(f ? f->name : "Amiibo");
+    }
+}
+
 uint16_t AmiiboBin::GetCharacterId() const {
     uint16_t cid_intl = (static_cast<uint16_t>(data_[0x1DC]) << 8) | data_[0x1DD];
     if (cid_intl != 0) return cid_intl;
@@ -619,11 +798,20 @@ uint16_t AmiiboBin::GetCharacterId() const {
 }
 
 void AmiiboBin::SetCharacterId(uint16_t char_id) {
+    uint16_t prev_id = GetCharacterId();
+    const auto* prev_f = FindFighterById(prev_id);
+    std::string cur_nick = GetAmiiboNickname();
+
     // Store in both Internal offset (0x1DC..0x1DD) and Tag offset (0x054..0x055) for universal compatibility
     data_[0x1DC] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
     data_[0x1DD] = static_cast<uint8_t>(char_id & 0xFF);
     data_[0x054] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
     data_[0x055] = static_cast<uint8_t>(char_id & 0xFF);
+
+    const auto* new_f = FindFighterById(char_id);
+    if (new_f && (cur_nick.empty() || (prev_f && cur_nick == std::string(prev_f->name).substr(0, 10)))) {
+        SetAmiiboNickname(new_f->name);
+    }
 }
 
 bool AmiiboBin::GetLearningEnabled() const {
@@ -1267,6 +1455,15 @@ std::string AmiiboBin::EvaluatePersonality() const {
 }
 
 void AmiiboBin::UpdateChecksumsAndCrypto() {
+    EnsureOwnerMiiPaired();
+
+    // Recompute 32-bit Application Data CRC-32 over 0x0DC..0x1B3 (216 bytes) at 0x034..0x037
+    uint32_t app_crc32 = ComputeCrc32(data_.data() + 0x0DC, 0x0D8);
+    data_[0x034] = static_cast<uint8_t>((app_crc32 >> 24) & 0xFF);
+    data_[0x035] = static_cast<uint8_t>((app_crc32 >> 16) & 0xFF);
+    data_[0x036] = static_cast<uint8_t>((app_crc32 >> 8) & 0xFF);
+    data_[0x037] = static_cast<uint8_t>(app_crc32 & 0xFF);
+
     // Increment 16-bit write counters at 0x029..0x02A and 0x0B4..0x0B5 (capped at 65535)
     uint16_t wc_amiibo = (static_cast<uint16_t>(data_[0x029]) << 8) | data_[0x02A];
     if (wc_amiibo < 0xFFFF) ++wc_amiibo;

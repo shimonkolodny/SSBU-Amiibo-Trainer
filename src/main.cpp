@@ -24,14 +24,16 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow);
 namespace {
 
 void PrintUsage(const char* prog) {
-    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.1 (GPU-First)\n"
+    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.2 (Auto-Mii + GPU-First)\n"
               << "Usage:\n"
               << "  " << prog << " --gui                        Launch native Windows GUI (default on Windows)\n"
               << "  " << prog << " [options]                    Run headless CLI training & spirit customization\n\n"
               << "Options:\n"
-              << "  --in <path>                  Input 540-byte Amiibo .bin file (or create new if omitted)\n"
+              << "  --in <path>                  Input 540-byte Amiibo .bin file (auto-pairs Owner Mii if unregistered)\n"
               << "  --out <path>                 Output trained 540-byte Amiibo .bin file\n"
               << "  --keys <path>                Optional 160-byte key_retail.bin for NTAG215 AES-128-CTR decrypt/encrypt\n"
+              << "  --nickname <name>            Set Amiibo Nickname (up to 10 UTF-16BE chars, auto-defaults to Fighter name)\n"
+              << "  --mii-name <owner>           Set paired Owner Mii Name (up to 10 UTF-16LE chars, default: SwitchMii)\n"
               << "  --backend <auto|gpu|cpu>     Compute backend preference (default: auto = GPU First -> CPU Fallback)\n"
               << "  --gpu-info                   Probe and print GPU compute device capabilities\n"
               << "  --fighter <id_or_name>       Amiibo fighter ID (e.g. 0x0000) or name (e.g. \"Mario\", \"Kazuya\")\n"
@@ -88,6 +90,10 @@ void PrintDiagnosticSummary(const ssbu::AmiiboBin& bin) {
     auto gpu = ssbu::GpuComputeEngine::ProbeGpuDevice();
     std::cout << "=== SSBU Amiibo Diagnostic Summary ===\n"
               << "  Format Status   : " << bin.GetFormatStatusString() << "\n"
+              << "  Owner Mii       : " << (bin.HasOwnerMii() ? "AUTO-PAIRED" : "UNREGISTERED")
+              << " (Owner: \"" << bin.GetOwnerMiiName() << "\" | Nickname: \"" << bin.GetAmiiboNickname()
+              << "\" | CRC-16: 0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
+              << bin.GetOwnerMiiCrc16() << std::dec << std::setfill(' ') << ")\n"
               << "  Compute Probe   : " << gpu.backend_name << " (" << gpu.adapter_name << ")\n"
               << "  Fighter         : " << (f ? f->name : "Unknown")
               << " (0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
@@ -119,6 +125,8 @@ int main(int argc, char** argv) {
     std::string in_path;
     std::string out_path;
     std::string keys_path;
+    std::string nickname_arg;
+    std::string mii_name_arg;
     std::string backend_str = "auto";
     std::string fighter_arg = "Mario";
     std::string opponent_arg = "Fox";
@@ -185,6 +193,10 @@ int main(int argc, char** argv) {
             out_path = argv[++i];
         } else if (arg == "--keys" && i + 1 < argc) {
             keys_path = argv[++i];
+        } else if (arg == "--nickname" && i + 1 < argc) {
+            nickname_arg = argv[++i];
+        } else if (arg == "--mii-name" && i + 1 < argc) {
+            mii_name_arg = argv[++i];
         } else if (arg == "--backend" && i + 1 < argc) {
             backend_str = argv[++i];
         } else if (arg == "--fighter" && i + 1 < argc) {
@@ -231,6 +243,13 @@ int main(int argc, char** argv) {
             std::cerr << "Error loading input .bin: " << err << "\n";
             return 1;
         }
+    }
+
+    if (!mii_name_arg.empty()) {
+        bin.SetOwnerMiiName(mii_name_arg);
+    }
+    if (!nickname_arg.empty()) {
+        bin.SetAmiiboNickname(nickname_arg);
     }
 
     if (inspect_only) {

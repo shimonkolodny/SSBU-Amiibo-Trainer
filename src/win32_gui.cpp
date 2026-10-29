@@ -35,6 +35,9 @@ enum ControlId {
     ID_CMB_FIGHTER = 110,
     ID_CMB_COSTUME = 111,
     ID_CHK_LEARNING = 112,
+    ID_EDT_NICKNAME = 113,
+    ID_EDT_MII_NAME = 114,
+    ID_BTN_PAIR_MII = 115,
 
     ID_EDT_SPIRIT_SEARCH = 120,
     ID_BTN_SPIRIT_FILTER = 121,
@@ -82,7 +85,7 @@ struct GuiAppState {
     AmiiboBin bin;
     GpuDeviceInfo gpu_info;
     std::string current_path = "unloaded_amiibo.bin";
-    std::string last_sim_log = "No training matches run yet. Configure your opponent and click 'RUN FULL TRAINING SIMULATION'.\r\n";
+    std::string last_sim_log = "No training matches run yet. Configure your opponent and click 'RUN GPU-ACCELERATED TRAINING SIMULATION'.\r\n";
     int active_view = 0; // 0 = Overview, 1 = Full AI Behavior & Moves, 2 = Match Log
 
     HFONT font_regular = nullptr;
@@ -92,6 +95,8 @@ struct GuiAppState {
     HWND hwnd_fighter = nullptr;
     HWND hwnd_costume = nullptr;
     HWND hwnd_learning = nullptr;
+    HWND hwnd_nickname = nullptr;
+    HWND hwnd_mii_name = nullptr;
 
     HWND hwnd_spirit_search = nullptr;
     HWND hwnd_primary = nullptr;
@@ -138,10 +143,15 @@ static std::string BuildOverviewReport(const AmiiboBin& bin, const std::string& 
     const auto* fighter = FindFighterById(bin.GetCharacterId());
     std::ostringstream oss;
     oss << "====================================================================\n";
-    oss << "       SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.1 (GPU)      \n";
+    oss << "    SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.2 (AUTO-MII)    \n";
     oss << "====================================================================\n";
     oss << "File Path          : " << path << "\n";
     oss << "Binary Format      : " << bin.GetFormatStatusString() << "\n";
+    oss << "Owner Mii Status   : " << (bin.HasOwnerMii() ? "AUTO-PAIRED & READY FOR SWITCH" : "UNREGISTERED")
+        << " (Owner Mii: \"" << bin.GetOwnerMiiName()
+        << "\" | Nickname: \"" << bin.GetAmiiboNickname()
+        << "\" | Mii CRC-16: 0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
+        << bin.GetOwnerMiiCrc16() << std::dec << std::setfill(' ') << ")\n";
     oss << "Compute Engine     : " << g_app.gpu_info.backend_name << " (" << g_app.gpu_info.adapter_name;
     if (g_app.gpu_info.dedicated_vram_mb > 0) {
         oss << ", " << g_app.gpu_info.dedicated_vram_mb << " MB VRAM";
@@ -323,6 +333,9 @@ static void SyncControlsFromBin() {
     SendMessageA(g_app.hwnd_costume, CB_SETCURSEL, g_app.bin.GetAlternateSkin() % 8, 0);
     SendMessageA(g_app.hwnd_learning, BM_SETCHECK, g_app.bin.GetLearningEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    SetWindowTextA(g_app.hwnd_nickname, g_app.bin.GetAmiiboNickname().c_str());
+    SetWindowTextA(g_app.hwnd_mii_name, g_app.bin.GetOwnerMiiName().c_str());
+
     char atk_buf[32], def_buf[32];
     std::snprintf(atk_buf, sizeof(atk_buf), "%d", static_cast<int>(g_app.bin.GetAttackStat()));
     std::snprintf(def_buf, sizeof(def_buf), "%d", static_cast<int>(g_app.bin.GetDefenseStat()));
@@ -362,6 +375,13 @@ static void ApplySelectedFighterAndSpirits(HWND hwnd) {
     if (c_idx != CB_ERR) {
         g_app.bin.SetAlternateSkin(static_cast<uint8_t>(c_idx));
     }
+
+    char nick_buf[32] = {0}, mii_buf[32] = {0};
+    GetWindowTextA(g_app.hwnd_nickname, nick_buf, sizeof(nick_buf));
+    GetWindowTextA(g_app.hwnd_mii_name, mii_buf, sizeof(mii_buf));
+    g_app.bin.EnsureOwnerMiiPaired();
+    if (nick_buf[0] != '\0') g_app.bin.SetAmiiboNickname(nick_buf);
+    if (mii_buf[0] != '\0')  g_app.bin.SetOwnerMiiName(mii_buf);
 
     bool learning = (SendMessageA(g_app.hwnd_learning, BM_GETCHECK, 0, 0) == BST_CHECKED);
     g_app.bin.SetLearningEnabled(learning);
@@ -420,123 +440,134 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             g_app.bin.TryAutoLoadRetailKey();
             g_app.gpu_info = GpuComputeEngine::ProbeGpuDevice();
 
-            // --- Group 1: Amiibo File, Fighter Identity & Crypto Keys ---
-            HWND grp1 = CreateWindowA("BUTTON", "1. Amiibo File (.bin), Fighter Identity & Retail Crypto Keys",
-                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 10, 490, 142, hwnd, nullptr, nullptr, nullptr);
+            // --- Group 1: Amiibo File, Fighter Identity, Auto-Paired Owner Mii & Crypto Keys ---
+            HWND grp1 = CreateWindowA("BUTTON", "1. Amiibo File (.bin), Fighter, Auto-Paired Owner Mii & Retail Keys",
+                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 8, 490, 152, hwnd, nullptr, nullptr, nullptr);
 
             CreateWindowA("BUTTON", "Load .bin File...", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                26, 32, 110, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_LOAD_BIN), nullptr, nullptr);
+                26, 28, 110, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_LOAD_BIN), nullptr, nullptr);
             CreateWindowA("BUTTON", "New Blank .bin", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                142, 32, 110, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_NEW_BIN), nullptr, nullptr);
+                142, 28, 110, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_NEW_BIN), nullptr, nullptr);
             CreateWindowA("BUTTON", "Save Trained .bin...", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                258, 32, 125, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_SAVE_BIN), nullptr, nullptr);
+                258, 28, 125, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_SAVE_BIN), nullptr, nullptr);
             CreateWindowA("BUTTON", "Load key_retail...", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                389, 32, 105, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_LOAD_KEYS), nullptr, nullptr);
+                389, 28, 105, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_LOAD_KEYS), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Amiibo Fighter:", WS_VISIBLE | WS_CHILD, 26, 70, 92, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Fighter:", WS_VISIBLE | WS_CHILD, 26, 62, 60, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_fighter = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                120, 66, 235, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_FIGHTER), nullptr, nullptr);
+                88, 58, 265, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_FIGHTER), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Alt:", WS_VISIBLE | WS_CHILD, 362, 70, 26, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Alt:", WS_VISIBLE | WS_CHILD, 360, 62, 26, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_costume = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                390, 66, 104, 200, hwnd, reinterpret_cast<HMENU>(ID_CMB_COSTUME), nullptr, nullptr);
+                388, 58, 106, 200, hwnd, reinterpret_cast<HMENU>(ID_CMB_COSTUME), nullptr, nullptr);
             for (int c = 1; c <= 8; ++c) {
                 char cbuf[24];
                 std::snprintf(cbuf, sizeof(cbuf), "Costume P%d", c);
                 SendMessageA(g_app.hwnd_costume, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(cbuf));
             }
 
+            CreateWindowA("STATIC", "Nickname:", WS_VISIBLE | WS_CHILD, 26, 94, 65, 20, hwnd, nullptr, nullptr, nullptr);
+            g_app.hwnd_nickname = CreateWindowA("EDIT", "Mario", WS_VISIBLE | WS_CHILD | WS_BORDER,
+                94, 91, 105, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_NICKNAME), nullptr, nullptr);
+
+            CreateWindowA("STATIC", "Owner Mii:", WS_VISIBLE | WS_CHILD, 208, 94, 68, 20, hwnd, nullptr, nullptr, nullptr);
+            g_app.hwnd_mii_name = CreateWindowA("EDIT", "SwitchMii", WS_VISIBLE | WS_CHILD | WS_BORDER,
+                278, 91, 105, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_MII_NAME), nullptr, nullptr);
+
+            CreateWindowA("BUTTON", "Auto-Pair Mii", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+                390, 90, 104, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_PAIR_MII), nullptr, nullptr);
+
             g_app.hwnd_learning = CreateWindowA("BUTTON", "Enable In-Game AI Learning",
-                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 26, 108, 195, 24,
+                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 26, 124, 195, 24,
                 hwnd, reinterpret_cast<HMENU>(ID_CHK_LEARNING), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "Reset Lv 1", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                235, 106, 120, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_RESET_LV1), nullptr, nullptr);
+                235, 122, 120, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_RESET_LV1), nullptr, nullptr);
             CreateWindowA("BUTTON", "Instant Lv 50", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                365, 106, 129, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_MAX_LV50), nullptr, nullptr);
+                365, 122, 129, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_MAX_LV50), nullptr, nullptr);
 
             // --- Group 2: SSBU Spirit Collection & Stat Loadout ---
             HWND grp2 = CreateWindowA("BUTTON", "2. SSBU Spirit Collection (Primary & 255 Support Spirit Skills)",
-                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 158, 490, 245, hwnd, nullptr, nullptr, nullptr);
+                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 164, 490, 242, hwnd, nullptr, nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Primary Preset:", WS_VISIBLE | WS_CHILD, 26, 180, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Primary Preset:", WS_VISIBLE | WS_CHILD, 26, 186, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_primary = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 176, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_PRIMARY_SPIRIT), nullptr, nullptr);
+                125, 182, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_PRIMARY_SPIRIT), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "ATK / DEF:", WS_VISIBLE | WS_CHILD, 26, 210, 80, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "ATK / DEF:", WS_VISIBLE | WS_CHILD, 26, 214, 80, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_atk = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                105, 207, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_ATK), nullptr, nullptr);
+                105, 211, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_ATK), nullptr, nullptr);
             g_app.hwnd_def = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                166, 207, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_DEF), nullptr, nullptr);
+                166, 211, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_DEF), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "2500/2500", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                228, 206, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_BALANCED), nullptr, nullptr);
+                228, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_BALANCED), nullptr, nullptr);
             CreateWindowA("BUTTON", "3200/1800", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                299, 206, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_AGGRO), nullptr, nullptr);
+                299, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_AGGRO), nullptr, nullptr);
             CreateWindowA("BUTTON", "1800/3200", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                370, 206, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_TANK), nullptr, nullptr);
+                370, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_TANK), nullptr, nullptr);
             CreateWindowA("BUTTON", "0/0", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                441, 206, 52, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_VANILLA), nullptr, nullptr);
+                441, 210, 52, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_VANILLA), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Filter Supports:", WS_VISIBLE | WS_CHILD, 26, 240, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Filter Supports:", WS_VISIBLE | WS_CHILD, 26, 244, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_spirit_search = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
-                125, 237, 275, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_SPIRIT_SEARCH), nullptr, nullptr);
+                125, 241, 275, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_SPIRIT_SEARCH), nullptr, nullptr);
             CreateWindowA("BUTTON", "Filter List", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                406, 236, 87, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_SPIRIT_FILTER), nullptr, nullptr);
+                406, 240, 87, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_SPIRIT_FILTER), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Support Slot 1:", WS_VISIBLE | WS_CHILD, 26, 270, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Support Slot 1:", WS_VISIBLE | WS_CHILD, 26, 274, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_sup1 = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 266, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_1), nullptr, nullptr);
+                125, 270, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_1), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Support Slot 2:", WS_VISIBLE | WS_CHILD, 26, 300, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Support Slot 2:", WS_VISIBLE | WS_CHILD, 26, 304, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_sup2 = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 296, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_2), nullptr, nullptr);
+                125, 300, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_2), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Support Slot 3:", WS_VISIBLE | WS_CHILD, 26, 330, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Support Slot 3:", WS_VISIBLE | WS_CHILD, 26, 334, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_sup3 = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 326, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_3), nullptr, nullptr);
+                125, 330, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_SUPPORT_3), nullptr, nullptr);
 
             g_app.hwnd_slot_meter = CreateWindowA("STATIC", "Support Slots Used: 0 / 3 (Valid)",
-                WS_VISIBLE | WS_CHILD, 26, 366, 260, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_SLOT_METER), nullptr, nullptr);
+                WS_VISIBLE | WS_CHILD, 26, 368, 260, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_SLOT_METER), nullptr, nullptr);
             CreateWindowA("BUTTON", "Equip Selected Spirits & Stats", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                292, 362, 201, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_APPLY_SPIRITS), nullptr, nullptr);
+                292, 364, 201, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_APPLY_SPIRITS), nullptr, nullptr);
 
             // --- Group 3: GPU-First Combat Simulator ---
             HWND grp3 = CreateWindowA("BUTTON", "3. GPU-First SSBU AI Combat Simulator (Direct3D 11 CS -> CPU Fallback)",
-                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 408, 490, 184, hwnd, nullptr, nullptr, nullptr);
+                WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 410, 490, 182, hwnd, nullptr, nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Sparring Rival:", WS_VISIBLE | WS_CHILD, 26, 430, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Sparring Rival:", WS_VISIBLE | WS_CHILD, 26, 432, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_opponent = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 426, 175, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_OPPONENT), nullptr, nullptr);
+                125, 428, 175, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_OPPONENT), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Device:", WS_VISIBLE | WS_CHILD, 306, 430, 44, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Device:", WS_VISIBLE | WS_CHILD, 306, 432, 44, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_compute = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                352, 426, 141, 200, hwnd, reinterpret_cast<HMENU>(ID_CMB_COMPUTE), nullptr, nullptr);
+                352, 428, 141, 200, hwnd, reinterpret_cast<HMENU>(ID_CMB_COMPUTE), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Opponent Style:", WS_VISIBLE | WS_CHILD, 26, 460, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Opponent Style:", WS_VISIBLE | WS_CHILD, 26, 462, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_archetype = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                125, 456, 175, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_ARCHETYPE), nullptr, nullptr);
+                125, 458, 175, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_ARCHETYPE), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Focus:", WS_VISIBLE | WS_CHILD, 306, 460, 44, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Focus:", WS_VISIBLE | WS_CHILD, 306, 462, 44, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_focus = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
-                352, 456, 141, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_FOCUS), nullptr, nullptr);
+                352, 458, 141, 220, hwnd, reinterpret_cast<HMENU>(ID_CMB_FOCUS), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "Match Count:", WS_VISIBLE | WS_CHILD, 26, 492, 95, 20, hwnd, nullptr, nullptr, nullptr);
+            CreateWindowA("STATIC", "Match Count:", WS_VISIBLE | WS_CHILD, 26, 494, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_games = CreateWindowA("EDIT", "500", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                125, 489, 75, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_GAMES), nullptr, nullptr);
+                125, 491, 75, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_GAMES), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "100", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                210, 488, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_100), nullptr, nullptr);
+                210, 490, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_100), nullptr, nullptr);
             CreateWindowA("BUTTON", "500", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                278, 488, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_500), nullptr, nullptr);
+                278, 490, 64, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_500), nullptr, nullptr);
             CreateWindowA("BUTTON", "1,000", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                346, 488, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_1000), nullptr, nullptr);
+                346, 490, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_1000), nullptr, nullptr);
             CreateWindowA("BUTTON", "5,000", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                418, 488, 75, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_5000), nullptr, nullptr);
+                418, 490, 75, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_5000), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "RUN GPU-ACCELERATED TRAINING SIMULATION (LV 50 READY .BIN)",
                 WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                26, 522, 467, 34, hwnd, reinterpret_cast<HMENU>(ID_BTN_TRAIN), nullptr, nullptr);
+                26, 524, 467, 34, hwnd, reinterpret_cast<HMENU>(ID_BTN_TRAIN), nullptr, nullptr);
 
             // --- Group 4: Direct AI Behavior Fine-Tuning ---
             HWND grp4 = CreateWindowA("BUTTON", "4. Direct AI Behavior Fine-Tuning (0 - 100% Weight Overrides)",
@@ -586,8 +617,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 518, 662, 530, 22, hwnd, reinterpret_cast<HMENU>(ID_PROGRESS), nullptr, nullptr);
             SendMessageA(g_app.hwnd_progress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
 
-            std::string init_status = "Ready. Compute Engine: " + g_app.gpu_info.backend_name +
-                " (" + g_app.gpu_info.adapter_name + ") — GPU First before CPU fallback.";
+            std::string init_status = "Ready. Owner Mii Auto-Pairing Active | Compute: " + g_app.gpu_info.backend_name +
+                " (" + g_app.gpu_info.adapter_name + ").";
             g_app.hwnd_status = CreateWindowA("STATIC", init_status.c_str(),
                 WS_VISIBLE | WS_CHILD, 14, 696, 1034, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_STATUS), nullptr, nullptr);
 
@@ -650,7 +681,24 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int id = LOWORD(wParam);
             int code = HIWORD(wParam);
 
-            if (id == ID_CMB_PRIMARY_SPIRIT && code == CBN_SELCHANGE) {
+            if (id == ID_CMB_FIGHTER && code == CBN_SELCHANGE) {
+                const auto& roster = GetFighterCatalog();
+                LRESULT f_idx = SendMessageA(g_app.hwnd_fighter, CB_GETCURSEL, 0, 0);
+                if (f_idx != CB_ERR && static_cast<size_t>(f_idx) < roster.size()) {
+                    g_app.bin.SetCharacterId(roster[f_idx].char_id);
+                    SyncControlsFromBin();
+                }
+            } else if (id == ID_BTN_PAIR_MII) {
+                char nick_buf[32] = {0}, mii_buf[32] = {0};
+                GetWindowTextA(g_app.hwnd_nickname, nick_buf, sizeof(nick_buf));
+                GetWindowTextA(g_app.hwnd_mii_name, mii_buf, sizeof(mii_buf));
+                g_app.bin.AutoPairOwnerMii(
+                    mii_buf[0] ? mii_buf : "SwitchMii",
+                    nick_buf[0] ? nick_buf : "");
+                SyncControlsFromBin();
+                SetWindowTextA(g_app.hwnd_status,
+                    "Paired 96-byte Owner Mii (with valid CRC-16-CCITT) and UTF-16BE Nickname to Amiibo!");
+            } else if (id == ID_CMB_PRIMARY_SPIRIT && code == CBN_SELCHANGE) {
                 LRESULT idx = SendMessageA(g_app.hwnd_primary, CB_GETCURSEL, 0, 0);
                 const auto& primaries = GetPrimarySpiritCatalog();
                 if (idx != CB_ERR && static_cast<size_t>(idx) < primaries.size()) {
@@ -710,7 +758,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     if (g_app.bin.LoadFromFile(filename, &err)) {
                         g_app.current_path = filename;
                         SyncControlsFromBin();
-                        std::string msg = "Loaded Amiibo .bin: " + g_app.current_path;
+                        std::string msg = "Loaded Amiibo .bin (Owner Mii Paired: \"" +
+                            g_app.bin.GetOwnerMiiName() + "\"): " + g_app.current_path;
                         SetWindowTextA(g_app.hwnd_status, msg.c_str());
                     } else {
                         MessageBoxA(hwnd, err.c_str(), "Load Error", MB_ICONERROR);
@@ -741,7 +790,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     ? roster[f_idx].char_id : 0x0000;
                 g_app.bin.InitializeBlankFighter(char_id, 0);
                 SyncControlsFromBin();
-                SetWindowTextA(g_app.hwnd_status, "Initialized fresh SSBU Amiibo .bin in memory.");
+                SetWindowTextA(g_app.hwnd_status, "Initialized fresh SSBU Amiibo .bin with auto-paired Owner Mii & Nickname.");
             } else if (id == ID_BTN_RESET_LV1) {
                 g_app.bin.SetDisplayedLevel(1);
                 g_app.bin.SetCpuLevel(1);
@@ -755,7 +804,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowTextA(g_app.hwnd_status, "Boosted Amiibo experience to Level 50 (3,912 XP, CPU Lv 9).");
             } else if (id == ID_BTN_APPLY_SPIRITS) {
                 ApplySelectedFighterAndSpirits(hwnd);
-                SetWindowTextA(g_app.hwnd_status, "Equipped Primary & Support Spirits and updated Amiibo AppData.");
+                SetWindowTextA(g_app.hwnd_status, "Equipped Primary & Support Spirits, synced Owner Mii/Nickname, and updated AppData.");
             } else if (id == ID_BTN_APPLY_TUNING) {
                 AmiiboBehaviorParams bp = g_app.bin.DecodeBehavior();
                 auto read_pct = [](HWND h) {
@@ -820,6 +869,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 log_ss << "Compute Backend     : " << sum.compute_backend_used << "\n";
                 log_ss << "Compute Device      : " << sum.compute_adapter_name
                        << " (" << std::fixed << std::setprecision(2) << sum.compute_elapsed_ms << " ms)\n";
+                log_ss << "Paired Owner Mii    : \"" << g_app.bin.GetOwnerMiiName()
+                       << "\" | Amiibo Nickname: \"" << g_app.bin.GetAmiiboNickname() << "\"\n";
                 log_ss << "Matches Simulated   : " << sum.total_games << "\n";
                 log_ss << "Record (W - L)      : " << sum.wins << " W - " << sum.losses << " L ("
                        << std::fixed << std::setprecision(1) << win_rate << "% Win Rate)\n";
@@ -846,7 +897,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SyncControlsFromBin();
                 char status_buf[256];
                 std::snprintf(status_buf, sizeof(status_buf),
-                    "[%s | %.2f ms] %d games: %dW-%dL (%.1f%%) | Lv %d -> %d | Personality: %s",
+                    "[%s | %.2f ms] %d games: %dW-%dL (%.1f%%) | Lv %d -> %d | Style: %s",
                     sum.compute_backend_used.c_str(), sum.compute_elapsed_ms,
                     sum.total_games, sum.wins, sum.losses, win_rate,
                     sum.initial_level, sum.final_level, sum.final_personality.c_str());
@@ -864,8 +915,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 if (GetSaveFileNameA(&ofn)) {
                     std::string err;
                     if (g_app.bin.SaveToFile(filename, &err)) {
-                        std::string msg = std::string("Saved trained 540-byte Amiibo .bin to: ") + filename +
-                            " (" + g_app.bin.GetFormatStatusString() + ")";
+                        std::string msg = std::string("Saved trained 540-byte Amiibo .bin (Owner Mii Paired: \"") +
+                            g_app.bin.GetOwnerMiiName() + "\") to: " + filename;
                         SetWindowTextA(g_app.hwnd_status, msg.c_str());
                         MessageBoxA(hwnd, msg.c_str(), "Amiibo .bin Saved Successfully", MB_ICONINFORMATION);
                     } else {
@@ -887,7 +938,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
-    const char CLASS_NAME[] = "SSBUAmiiboTrainerWin32ClassV21";
+    const char CLASS_NAME[] = "SSBUAmiiboTrainerWin32ClassV22";
     WNDCLASSA wc{};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
@@ -898,7 +949,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
 
     HWND hwnd = CreateWindowExA(
         0, CLASS_NAME,
-        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.1 (GPU-First C++20)",
+        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.2 (Auto-Mii + GPU-First C++20)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 1075, 765,
         nullptr, nullptr, hInstance, nullptr);

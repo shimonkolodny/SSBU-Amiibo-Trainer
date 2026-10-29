@@ -1,6 +1,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -55,6 +57,49 @@ void TestSpiritCatalogAndRoster() {
     std::cout << "[PASS] TestSpiritCatalogAndRoster (255 raw / " << selectable.size()
               << " selectable Support Spirits, " << primaries.size()
               << " Primary Spirits, " << roster.size() << " Fighters)\n";
+}
+
+void TestAutoPairOwnerMiiAndNickname() {
+    // 1. Blank fighter must automatically have a paired 96-byte Owner Mii & valid CRC-16-CCITT
+    ssbu::AmiiboBin bin;
+    bin.InitializeBlankFighter(0x3601, 0); // Sephiroth
+    assert(bin.HasOwnerMii());
+    assert(bin.VerifyOwnerMiiCrc16());
+    assert(bin.GetOwnerMiiName() == "SwitchMii");
+    assert(bin.GetAmiiboNickname() == "Sephiroth");
+
+    // 2. Simulate loading a "virgin" unregistered .bin (0x02C = 0x00 and 0x038..0x0AB all zero)
+    std::vector<uint8_t> virgin(540, 0);
+    virgin[0x054] = 0x39; virgin[0x055] = 0x00; // Kazuya in Tag Model Info (0x3900)
+    const std::string virgin_path = "test_virgin_unregistered.bin";
+    {
+        std::ofstream f(virgin_path, std::ios::binary | std::ios::trunc);
+        f.write(reinterpret_cast<const char*>(virgin.data()), 540);
+    }
+
+    ssbu::AmiiboBin loaded_virgin;
+    std::string err;
+    bool ok = loaded_virgin.LoadFromFile(virgin_path, &err);
+    assert(ok);
+    assert(loaded_virgin.GetCharacterId() == 0x3900);
+    assert(loaded_virgin.HasOwnerMii());
+    assert(loaded_virgin.VerifyOwnerMiiCrc16());
+    assert(loaded_virgin.GetOwnerMiiName() == "SwitchMii");
+    assert(loaded_virgin.GetAmiiboNickname() == "Kazuya");
+
+    // 3. Customize Owner Mii & Nickname and verify CRC-16-CCITT updates and persists
+    loaded_virgin.SetOwnerMiiName("Shimon");
+    loaded_virgin.SetAmiiboNickname("IronFist");
+    assert(loaded_virgin.HasOwnerMii());
+    assert(loaded_virgin.VerifyOwnerMiiCrc16());
+    assert(loaded_virgin.GetOwnerMiiName() == "Shimon");
+    assert(loaded_virgin.GetAmiiboNickname() == "IronFist");
+    std::remove(virgin_path.c_str());
+
+    std::cout << "[PASS] TestAutoPairOwnerMiiAndNickname (Owner Mii: \""
+              << loaded_virgin.GetOwnerMiiName() << "\", Nickname: \""
+              << loaded_virgin.GetAmiiboNickname() << "\", CRC-16: 0x"
+              << std::hex << loaded_virgin.GetOwnerMiiCrc16() << std::dec << ")\n";
 }
 
 void TestBitfieldPackingAndStats() {
@@ -141,12 +186,14 @@ void TestNtag215TagConversionAndCryptoRoundTrip() {
     bool saved = bin.SaveToFile(enc_file, &err);
     assert(saved);
 
-    // Reload encrypted file with same retail key and verify all SSBU AppData fields survived round-trip
+    // Reload encrypted file with same retail key and verify all SSBU AppData & Owner Mii fields survived round-trip
     ssbu::AmiiboBin reloaded;
     reloaded.SetRetailKeyBytes(key_buf);
     bool loaded = reloaded.LoadFromFile(enc_file, &err);
     assert(loaded);
     assert(reloaded.WasLoadedEncrypted());
+    assert(reloaded.HasOwnerMii());
+    assert(reloaded.VerifyOwnerMiiCrc16());
     assert(reloaded.GetCharacterId() == sephiroth->char_id);
     assert(reloaded.GetAttackStat() == 2900);
     assert(reloaded.GetDefenseStat() == 2100);
@@ -235,6 +282,8 @@ void TestTrainingSimulation500Games() {
     assert(sum.final_level == 50);
     assert(bin.GetDisplayedLevel() == 50);
     assert(bin.GetCpuLevel() == 9);
+    assert(bin.HasOwnerMii());
+    assert(bin.VerifyOwnerMiiCrc16());
     assert(!bin.GetLearningEnabled()); // Frozen after training
 #ifdef _WIN32
     assert(sum.executed_on_gpu);
@@ -245,7 +294,7 @@ void TestTrainingSimulation500Games() {
     assert(trained_bp.attack_out_cliff > 0.55f);
     assert(trained_bp.meteor_master > 0.55f);
 
-    const std::string tmp_file = "test_trained_amiibo_v2.bin";
+    const std::string tmp_file = "test_trained_amiibo_v22.bin";
     std::string err;
     bool saved = bin.SaveToFile(tmp_file, &err);
     assert(saved);
@@ -253,6 +302,8 @@ void TestTrainingSimulation500Games() {
     ssbu::AmiiboBin reloaded;
     bool loaded = reloaded.LoadFromFile(tmp_file, &err);
     assert(loaded);
+    assert(reloaded.HasOwnerMii());
+    assert(reloaded.VerifyOwnerMiiCrc16());
     assert(reloaded.GetDisplayedLevel() == 50);
     assert(reloaded.GetAttackStat() == 2500);
     assert(reloaded.GetDefenseStat() == 2500);
@@ -270,13 +321,14 @@ void TestTrainingSimulation500Games() {
 } // namespace
 
 int main() {
-    std::cout << "Running SSBU Amiibo Trainer v2.1 (GPU-First) C++20 Unit & Integration Tests...\n";
+    std::cout << "Running SSBU Amiibo Trainer v2.2 (Auto-Mii + GPU-First) C++20 Unit & Integration Tests...\n";
     TestSpiritCatalogAndRoster();
+    TestAutoPairOwnerMiiAndNickname();
     TestBitfieldPackingAndStats();
     TestNtag215TagConversionAndCryptoRoundTrip();
     TestPersonalityScoringBranches();
     TestGpuFirstComputeEngine();
     TestTrainingSimulation500Games();
-    std::cout << "All SSBU Amiibo Trainer v2.1 tests passed!\n";
+    std::cout << "All SSBU Amiibo Trainer v2.2 tests passed!\n";
     return 0;
 }
