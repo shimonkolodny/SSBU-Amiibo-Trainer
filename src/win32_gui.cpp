@@ -4,10 +4,17 @@
 #include "training_sim.hpp"
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <commctrl.h>
 #include <commdlg.h>
+#include <algorithm>
+#include <cstdlib>
 #include <iomanip>
 #include <sstream>
 #include <string>

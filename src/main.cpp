@@ -2,6 +2,7 @@
 #include "ssbu_loadouts.hpp"
 #include "training_sim.hpp"
 #include "win32_gui.hpp"
+#include <algorithm>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
