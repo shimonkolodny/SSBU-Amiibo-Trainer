@@ -8,13 +8,13 @@
 namespace ssbu {
 
 enum class OpponentArchetype {
-    Balanced = 0,
+    FullRosterGauntlet = 0,
+    Balanced,
     Rushdown,
     Zoner,
     DefensiveParry,
     Grappler,
-    AerialEdgeguarder,
-    FullRosterGauntlet
+    AerialEdgeguarder
 };
 
 enum class TrainingFocus {
@@ -23,20 +23,23 @@ enum class TrainingFocus {
     ParryAndPunishMaster,
     AerialMeteorEdgeguarder,
     ShowOffEntertainer,
-    AdaptiveCounterplay
+    AdaptiveCounterplay,
+    HeavyArmorSmashBrawler
 };
 
 struct TrainingConfig {
     int num_games = 500;
-    uint16_t opponent_char_id = 0x0580; // Default: Fox
+    uint16_t opponent_char_id = 0x0580; // Default: Fox (when not FullRosterGauntlet)
     OpponentArchetype archetype = OpponentArchetype::FullRosterGauntlet;
     TrainingFocus focus = TrainingFocus::TournamentOptimal;
     int opponent_cpu_level = 9;
+    bool freeze_learning_after_training = true;
     uint32_t random_seed = 0x53534255;
 };
 
 struct MatchResult {
     int game_index;
+    const char* opponent_name;
     bool amiibo_won;
     int amiibo_stocks_left;
     int opponent_stocks_left;
@@ -52,6 +55,10 @@ struct TrainingSummary {
     int losses = 0;
     float first_quarter_win_rate = 0.0f;
     float final_quarter_win_rate = 0.0f;
+    float avg_damage_dealt = 0.0f;
+    float avg_damage_taken = 0.0f;
+    int total_parries = 0;
+    int total_meteors = 0;
     int initial_level = 1;
     int final_level = 50;
     int initial_cpu_level = 1;

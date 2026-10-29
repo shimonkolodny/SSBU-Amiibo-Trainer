@@ -8,10 +8,11 @@
 namespace ssbu {
 
 constexpr size_t kStandardAmiiboSize = 540;
+constexpr size_t kInternalAmiiboSize = 520;
 constexpr uint32_t kSsbuAppId = 0x34F80200; // Super Smash Bros. Ultimate App Access ID
 
 struct AmiiboBehaviorParams {
-    // Behavior parameters (0x168 - 0x181) stored as normalized percentages [0.0 .. 1.0]
+    // 36 Core Behavior parameters (0x168 - 0x181) stored as normalized probabilities [0.0 .. 1.0]
     float near_range          = 0.35f; // 0x168b1-b7
     float offensive           = 0.45f; // 0x168b0 + 0x169b2-b7
     float grounded            = 0.50f; // 0x169b0-b1 + 0x16Ab3-b7
@@ -49,6 +50,16 @@ struct AmiiboBehaviorParams {
     float charger             = 0.25f; // 0x180b0-b3 + 0x181b7
     float appeal              = 0.10f; // 0x181b2-b6 (Taunt)
 
+    // Fighter-Specific & Targeting Parameters (0x181 - 0x188)
+    float fighter_1           = 0.20f; // 0x181b0-b1 + 0x182b3-b7
+    float fighter_2           = 0.20f; // 0x182b0-b2 + 0x183b4-b7
+    float fighter_3           = 0.20f; // 0x183b0-b3 + 0x184b5-b7
+    float fighter_4           = 0.20f; // 0x184b0-b4 + 0x185b6-b7
+    float fighter_5           = 0.20f; // 0x185b0-b5 + 0x186b7
+    float advantageous_fighter= 0.30f; // 0x186b0-b6
+    float weaken_fighter      = 0.30f; // 0x187b1-b7
+    float revenge             = 0.30f; // 0x187b0 + 0x188b2-b7
+
     // Grounded Moves (0x188 - 0x195) in percent [0..100], sum <= 100 (Jab = 100 - sum)
     float ftilt       = 12.0f;
     float utilt       = 10.0f;
@@ -71,8 +82,16 @@ struct AmiiboBehaviorParams {
     float air_uspecial= 4.0f;
     float air_dspecial= 4.0f;
 
+    // Additional Behavior: Directional Air Dodge & Taunts (0x19E - 0x1A1)
+    float escape_air_forward  = 35.0f; // 0x19Eb0-b5 + 0x19Fb6-b7
+    float escape_air_backward = 35.0f; // 0x19Fb0-b5 + 0x1A0b6-b7
+    float appeal_hi           = 35.0f; // 0x1A0b0-b5 + 0x1A1b7
+    float appeal_lw           = 35.0f; // 0x1A1b0-b6
+
     float ImplicitJabPercent() const;
     float ImplicitNairPercent() const;
+    float ImplicitNeutralAirDodgePercent() const;
+    float ImplicitSideTauntPercent() const;
     void NormalizeMoveSums();
 };
 
@@ -85,10 +104,13 @@ public:
 
     void InitializeBlankFighter(uint16_t char_id, uint8_t skin = 0);
 
-    // Optional retail key support (160-byte key_retail.bin)
+    // Retail key support (160-byte key_retail.bin via nfc3d DRBG + AES-128-CTR + HMAC-SHA256)
     bool LoadRetailKey(const std::string& key_path, std::string* error_out = nullptr);
+    bool TryAutoLoadRetailKey();
     void SetRetailKeyBytes(const std::vector<uint8_t>& key_bytes);
     bool HasRetailKey() const { return has_retail_key_; }
+    bool WasLoadedEncrypted() const { return was_loaded_encrypted_; }
+    std::string GetFormatStatusString() const;
 
     // Metadata & Settings
     uint16_t GetCharacterId() const;
@@ -123,6 +145,8 @@ public:
     void SetStats(int16_t attack, int16_t defense, bool enforce_legal_cap = true);
 
     std::array<uint8_t, 3> GetSpiritSlots() const;
+    std::array<uint8_t, 3> GetLogicalSpiritList() const; // Normalized non-zero abilities
+    int GetTotalSpiritSlotCost() const;
     bool SetSpiritSlots(uint8_t slot1, uint8_t slot2, uint8_t slot3,
                         bool enforce_slot_cost = true,
                         std::string* error_out = nullptr);
@@ -133,16 +157,21 @@ public:
     AmiiboBehaviorParams DecodeBehavior() const;
     void EncodeBehavior(const AmiiboBehaviorParams& params);
 
-    // SSBU 25-state Personality Evaluator (matching jozz024/smash-amiibo-editor)
+    // Exact SSBU 25-state Personality Evaluator (matching jozz024/smash-amiibo-editor/resources/personality_data.json)
     std::string EvaluatePersonality() const;
 
     const std::vector<uint8_t>& RawBytes() const { return data_; }
 
+    // Direct nfc3d tag <-> internal conversion helpers
+    static void TagToInternal(const uint8_t* tag540, uint8_t* intl540);
+    static void InternalToTag(const uint8_t* intl540, uint8_t* tag540);
+
 private:
-    std::vector<uint8_t> data_;
+    std::vector<uint8_t> data_; // Stored in unpacked Internal/Plain layout (540 bytes)
     std::vector<uint8_t> retail_key_;
     bool has_retail_key_ = false;
-    bool is_encrypted_ = false;
+    bool was_loaded_encrypted_ = false;
+    bool loaded_as_tag_layout_ = false;
 
     uint32_t ReadBits(size_t start_byte, int start_bit_in_first,
                       size_t end_byte, int end_bit_in_last) const;

@@ -1,43 +1,28 @@
-# SSBU Amiibo Trainer & Spirit Collection Studio
+# Super Smash Bros. Ultimate — Amiibo Trainer & Spirit Studio v2.0 (C++20)
 
-A native C++20 Windows desktop application and cross-platform CLI tool for **Super Smash Bros. Ultimate** that loads 540-byte NTAG215 Amiibo `.bin` files, equips Primary and Support Spirits from the full SSBU Spirit Collection, simulates hundreds or thousands of matches against SSBU fighter archetypes, and outputs a tournament-ready Level 50 `.bin` file.
+A native C++20 Windows GUI & cross-platform CLI application that loads a 540-byte NTAG215 Amiibo `.bin` file, equips **Primary & Support Spirits** from the *Super Smash Bros. Ultimate* Spirit Collection, simulates **hundreds or thousands of combat matches** against any of the **89 playable SSBU fighters**, and outputs a **Level 50 ready `.bin` file** with authentic bit-packed AI behavior matrices, exact 25-state personality scoring, and optional `key_retail.bin` NTAG215 AES-128-CTR encryption & HMAC-SHA256 signing.
 
-## Technical Grounding & Open-Source References
+## Key Improvements in v2.0
 
-- **SSBU Decompilation & Fighter AI Modules**: Modeled on the unpacked fighter and AI target/action evaluation structures in [sbergeron42/ssbu-decomp](https://github.com/sbergeron42/ssbu-decomp) (`src/app/ai_helpers_a.cpp`, `src/app/ai_target_stat.cpp`, `src/app/fighter_attack.cpp`, and `src/app/FighterSpiritsSupportSkill.cpp`) and genetic-algorithm AI hooks in [OpenSmash-Ultimate/ssbu-recomp](https://github.com/OpenSmash-Ultimate/ssbu-recomp) (`fighter_sdk/include/mod_ga.h`).
-- **NTAG215 & SSBU AppData Binary Layout (`0xDC–0x1B3`)**: Implements the bit-reversed little-endian bitfield encoding, 50-level XP curve (`0x14C–0x14D`), 9-level hidden CPU XP curve (`0x14E–0x14F`), Spirit stat offsets (`0x150–0x153`), and Spirit slot bytes (`0xEC–0xEE`) documented in [jozz024/smash-amiibo-editor](https://github.com/jozz024/smash-amiibo-editor), [TitleOS/AlterEgo](https://github.com/TitleOS/AlterEgo), [AD2076/emuiibo](https://github.com/AD2076/emuiibo), and the [Smash Ultimate Amiibo Bin Guide](https://www.scribd.com/document/811418291/Comprehensive-Overview-of-Smash-Ultimate-Amiibo-bins).
-- **25-State SSBU Personality Evaluator**: Matches the exact threshold and flip scoring rules from [personality_data.json](https://github.com/jozz024/smash-amiibo-editor/blob/main/resources/personality_data.json).
-- **Full SSBU Spirit Collection Support**: Includes all 255 Support Spirit Ability IDs (`0–254`, with 1-, 2-, and 3-slot legality validation) and Primary Spirit presets ([Spirit - SmashWiki](https://www.ssbwiki.com/Spirit), [List of Spirits in Super Smash Bros. Ultimate](https://nintendo.fandom.com/wiki/List_of_Spirits_in_Super_Smash_Bros._Ultimate)).
+1. **Full NTAG215 Tag ↔ Internal Format Conversion & `nfc3d` Crypto (`src/amiibo_bin.cpp`)**:
+   - Automatic detection of encrypted NTAG215 Tag `.bin` dumps (`TagToInternal` / `InternalToTag` layout mapping) vs. decrypted/plain `.bin` files.
+   - Full `amiitool` / `nfc3d` AES-128-CTR encryption/decryption, NIST SP 800-90A HMAC-DRBG key derivation, and dual HMAC-SHA256 tag/data signature generation when a 160-byte `key_retail.bin` is loaded.
+   - Character ID (`uint16_t`) is written synchronously to both the internal `amiitool` offset (`0x1DC–0x1DD`) and the NTAG215 Tag Model Info offset (`0x054–0x055`).
+2. **Complete 89-Fighter Roster & Clean Spirit Collection (`src/ssbu_loadouts.cpp`)**:
+   - All **89 playable SSBU fighters** (Mario through Sora, including all Echo Fighters and DLC Fighter Passes 1 & 2) with authentic character IDs and AI combat profiles.
+   - **65+ Primary Spirit presets** (Legendary 4-Star, Ace 3-Star, Advanced, Novice, and Dojo styles) plus custom ATK/DEF (`-2000` to `5000`) and quick stat buttons (`2500/2500`, `3200/1800`, `1800/3200`, `0/0`).
+   - All **255 Support Spirit Ability IDs** (`0–254`) in the binary table, with internal `"Reserved"` placeholder slots filtered out of the GUI dropdowns and searchable via a live keyword filter.
+3. **Exact 25-State Personality Scoring (`src/amiibo_bin.cpp`)**:
+   - Implements the exact 8-branch (`def`, `agl`, `ofn`, `rsk`, `gen`, `ent`, `cau`, `dyn`) linear interpolation and `necessary_param` thresholds from `jozz024/smash-amiibo-editor`'s `personality_data.json`.
+4. **Upgraded Native Windows GUI (`src/win32_gui.cpp`)**:
+   - Common Controls v6 visual styles manifest with crisp `Segoe UI` and `Consolas` typography.
+   - 3-Tab Live Inspector (`View 1: Overview & Spirits`, `View 2: Full AI Behavior & Moves`, `View 3: Match Simulation Log`).
+   - Live Support Spirit slot-cost meter (`Support Slots Used: X / 3`), Spirit search filter, quick match-count buttons (`100`, `500`, `1,000`, `5,000`), `Reset Lv 1`, `Instant Lv 50`, and direct AI behavior weight fine-tuning (`Offense %`, `Ground %`, `Parry %`, `Edgeguard %`, `Grab %`, `Meteor %`).
 
-## Features
-
-1. **Upload or Generate `.bin` Files**: Load any 540-byte (or 532/572-byte) NTAG215 Amiibo `.bin` file or generate a fresh Level 1 dump for any SSBU fighter.
-2. **Complete Spirit Collection Editor**:
-   - **Primary Spirits**: Apply preset Primary Spirits (Neutral, Attack, Defense, Grab) or set custom Attack (`0x150–0x151`) and Defense (`0x152–0x153`) stats (enforcing the 5,000 combined stat cap in legal mode or unrestricted stats).
-   - **Support Spirit Abilities (`0xEC`, `0xED`, `0xEE`)**: Choose from all 255 SSBU Spirit abilities (e.g., *Super Armor*, *Slow Super Armor*, *Additional Midair Jump*, *Move Speed Up*, *Hyper Smash Attacks*, *Landing Lag Down*, *Autoheal*, *Great Autoheal*, *Easier Perfect Shield*, *Armor Knight*, *Weapon Attack Up*, *Air Attack Up*, *KOs Heal Damage*) with automatic 3-slot cost validation and multi-slot byte alignment.
-3. **High-Speed Multi-Hundred Match Simulator**:
-   - Run 100 to 100,000+ simulated 3-stock matches in seconds against specific fighters or the **Full Roster Gauntlet**.
-   - Evolve all 36 bit-packed behavior parameters (`0x168–0x181`), 10 Grounded Move probabilities (`0x188–0x195` + implicit Jab), and 8 Aerial Move probabilities (`0x195–0x19E` + implicit Nair) up to Level 50 (`3912` XP) and CPU Level 9 (`2765` XP).
-4. **Native Windows Win32 GUI + Cross-Platform CLI**:
-   - Launches a native Windows desktop interface when run with no arguments on Windows, or runs headlessly via CLI flags on Windows and Linux.
-
-## Building & Running Tests
+## Building & Running
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
-```
-
-### CLI Example
-
-```bash
-./build/ssbu_amiibo_trainer \
-  --generate "Bowser" \
-  --primary-spirit "Bowser (Wedding)" \
-  --slot1 "Additional Midair Jump" \
-  --slot2 "Landing Lag Down" \
-  --games 500 \
-  --focus 0 \
-  --output trained_bowser.bin
 ```
