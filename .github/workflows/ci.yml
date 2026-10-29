@@ -1,0 +1,51 @@
+name: Build and Test SSBU Amiibo Trainer
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build C++ Application & Tests
+        run: cmake --build build --config Release
+
+      - name: Run CTest Unit & 500-Match Simulation Suite
+        working-directory: build
+        run: ctest -C Release --output-on-failure
+
+      - name: Run End-to-End CLI Training & Spirit Verification
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ./build/Release/ssbu_amiibo_trainer.exe --generate "Bowser" --primary-spirit "Bowser (Wedding)" --slot1 "Additional Midair Jump" --slot2 "Landing Lag Down" --games 500 --focus 0 --output trained_bowser.bin
+            ./build/Release/ssbu_amiibo_trainer.exe --input trained_bowser.bin --inspect
+          else
+            ./build/ssbu_amiibo_trainer --generate "Bowser" --primary-spirit "Bowser (Wedding)" --slot1 "Additional Midair Jump" --slot2 "Landing Lag Down" --games 500 --focus 0 --output trained_bowser.bin
+            ./build/ssbu_amiibo_trainer --input trained_bowser.bin --inspect
+          fi
+        shell: bash
+
+      - name: Upload Windows Executable & Trained Sample .bin Artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSBU-Amiibo-Trainer-Windows-x64
+          path: |
+            build/Release/ssbu_amiibo_trainer.exe
+            trained_bowser.bin
