@@ -1,0 +1,87 @@
+name: Cleanup old artifacts
+
+# Daily cleanup of Actions artifacts from older runs, keeping only the
+# latest run's artifacts per workflow. Prevents the account's Actions
+# storage from filling up (it hit 100% of 2 GB on 2026-10-11, blocking uploads).
+# Runs on a schedule so it works the same in every repo without per-repo
+# workflow-name configuration. The Python skips any workflow named
+# "Cleanup old artifacts", so it never deletes its own runs' artifacts
+# (it uploads none anyway).
+on:
+  schedule:
+    - cron: '0 7 * * *'  # daily 07:00 UTC
+  workflow_dispatch:  # allow manual runs from the Actions tab
+
+permissions:
+  actions: write
+
+# Serialize cleanups so two runs can't race each other.
+concurrency:
+  group: artifact-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artifacts from all but the latest run of each workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+
+          repo = os.environ["REPO"]
+          token = os.environ["GH_TOKEN"]
+          base = f"https://api.github.com/repos/{repo}"
+          headers = {"Authorization": f"Bearer {token}",
+                     "Accept": "application/vnd.github+json",
+                     "X-GitHub-Api-Version": "2022-11-28"}
+
+          def api(method, path):
+              req = urllib.request.Request(base + path, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      body = r.read().decode()
+                      return r.status, (json.loads(body) if body else None)
+              except urllib.error.HTTPError as e:
+                  return e.code, None
+
+          def paged(path, key):
+              items, page = [], 1
+              while True:
+                  s, d = api("GET", f"{path}?per_page=100&page={page}")
+                  if s != 200:
+                      raise SystemExit(f"GET {path} failed with HTTP {s}")
+                  batch = d[key]
+                  items.extend(batch)
+                  if len(batch) < 100:
+                      break
+                  page += 1
+              return items
+
+          # Latest run id per workflow (skip this cleanup workflow itself).
+          latest = {}
+          for r in paged("/actions/runs", "workflow_runs"):
+              name = r["name"]
+              if name == "Cleanup old artifacts":
+                  continue
+              if name not in latest or r["id"] > latest[name]:
+                  latest[name] = r["id"]
+          keep = set(latest.values())
+
+          deleted, kept = 0, 0
+          for a in paged("/actions/artifacts", "artifacts"):
+              if a["expired"]:
+                  continue
+              if a["workflow_run"]["id"] in keep:
+                  kept += 1
+                  continue
+              s, _ = api("DELETE", f"/actions/artifacts/{a['id']}")
+              if s in (204, 404):
+                  deleted += 1
+              else:
+                  print(f"::warning::could not delete artifact {a['id']} (HTTP {s})")
+          print(f"Deleted {deleted} old artifacts; kept {kept} from latest runs {sorted(keep)}")
+          PYEOF
