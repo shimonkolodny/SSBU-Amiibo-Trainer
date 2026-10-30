@@ -118,6 +118,8 @@ public:
 
     // Full Nintendo Switch nn::nfp & NTAG215 Hardware/Cryptographic Verification
     bool VerifySwitchCompatibility(std::string* diagnostic_out = nullptr) const;
+    bool VerifyRetailKeyHash() const;
+    bool VerifyNtag215PwdPack() const;
     uint32_t GetAppDataCrc32() const;
 
     // Retail key support (Built-in 160-byte key_retail.bin via nfc3d DRBG + AES-128-CTR + HMAC-SHA256)

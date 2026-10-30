@@ -58,18 +58,23 @@ void TestSpiritCatalogAndRoster() {
 }
 
 void TestSwitchNfpCompatibilityAndAutoMii() {
+    // 1. Out-of-the-box AmiiboBin MUST have canonical 160-byte retail key (MD5: 45fd53569f5765eef9c337bd5172f937)
     ssbu::AmiiboBin bin;
     assert(bin.HasRetailKey());
+    assert(bin.VerifyRetailKeyHash());
     bin.InitializeBlankFighter(0x3601, 0); // Sephiroth
     assert(bin.HasOwnerMii());
     assert(bin.VerifyOwnerMiiCrc16());
     assert(bin.VerifyOwnerMiiBitfields());
+    assert(bin.VerifyNtag215PwdPack());
     assert(bin.GetOwnerMiiName() == "SwitchMii");
     assert(bin.GetAmiiboNickname() == "Sephiroth");
 
+    // 2. Verify full Nintendo Switch nn::nfp & NTAG215 hardware/crypto compatibility
     std::string diag;
     assert(bin.VerifySwitchCompatibility(&diag));
 
+    // 3. Verify that SetCharacterId NEVER corrupts the Owner Mii at 0x04C..0x0AB
     bin.SetOwnerMiiName("Shimon");
     bin.SetAmiiboNickname("OneWing");
     uint16_t mii_crc_before = bin.GetOwnerMiiCrc16();
@@ -78,13 +83,16 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     assert(bin.HasOwnerMii());
     assert(bin.VerifyOwnerMiiCrc16());
     assert(bin.VerifyOwnerMiiBitfields());
+    assert(bin.VerifyNtag215PwdPack());
     assert(bin.GetOwnerMiiCrc16() == mii_crc_before);
     assert(bin.VerifySwitchCompatibility(&diag));
 
+    // 4. Verify that saving and reloading without any external key_retail.bin produces an encrypted NTAG215 Tag file
     const std::string out_file = "test_switch_ready_kazuya.bin";
     std::string err;
     assert(bin.SaveToFile(out_file, &err));
 
+    // Inspect raw disk bytes to verify Tag Layout (UID at 0x000, BCC0 at 0x003, BCC1 at 0x008, CC at 0x00C..0x00F, 0xA5 at 0x010, FigID 0x02 at 0x05B, PWD/PACK at 0x214..0x219)
     std::ifstream raw_in(out_file, std::ios::binary);
     std::vector<uint8_t> disk_tag(540, 0);
     raw_in.read(reinterpret_cast<char*>(disk_tag.data()), 540);
@@ -94,8 +102,19 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     assert(disk_tag[0x008] == (disk_tag[0x004] ^ disk_tag[0x005] ^ disk_tag[0x006] ^ disk_tag[0x007]));
     assert(disk_tag[0x00C] == 0xF1 && disk_tag[0x00D] == 0x10 && disk_tag[0x00E] == 0xFF && disk_tag[0x00F] == 0xEE);
     assert(disk_tag[0x010] == 0xA5);
-    assert(disk_tag[0x054] == 0x39 && disk_tag[0x055] == 0x00);
-    assert(disk_tag[0x05B] == 0x02);
+    assert(disk_tag[0x054] == 0x39 && disk_tag[0x055] == 0x00); // Kazuya in Tag Layout
+    assert(disk_tag[0x05B] == 0x02); // Mandatory Amiibo Figure ID constant
+    // Verify NTAG215 Page 133 PWD & Page 134 PACK (0x8080)
+    assert(disk_tag[0x214] == (disk_tag[0x001] ^ disk_tag[0x004] ^ 0xAAu));
+    assert(disk_tag[0x215] == (disk_tag[0x002] ^ disk_tag[0x005] ^ 0x55u));
+    assert(disk_tag[0x216] == (disk_tag[0x004] ^ disk_tag[0x006] ^ 0xAAu));
+    assert(disk_tag[0x217] == (disk_tag[0x005] ^ disk_tag[0x007] ^ 0x55u));
+    assert(disk_tag[0x218] == 0x80 && disk_tag[0x219] == 0x80);
+
+    // 5. Verify that passing a corrupt external key_retail.bin is rejected and falls back to the canonical built-in retail key
+    std::vector<uint8_t> corrupt_key(160, 0xAA);
+    bin.SetRetailKeyBytes(corrupt_key);
+    assert(bin.VerifyRetailKeyHash()); // Must remain canonical built-in retail key
 
     ssbu::AmiiboBin reloaded;
     assert(reloaded.LoadFromFile(out_file, &err));
@@ -188,6 +207,8 @@ void TestNtag215TagConversionAndCryptoRoundTrip() {
     assert(reloaded.HasOwnerMii());
     assert(reloaded.VerifyOwnerMiiCrc16());
     assert(reloaded.VerifyOwnerMiiBitfields());
+    assert(reloaded.VerifyRetailKeyHash());
+    assert(reloaded.VerifyNtag215PwdPack());
     assert(reloaded.VerifySwitchCompatibility());
     assert(reloaded.GetCharacterId() == sephiroth->char_id);
     assert(reloaded.GetAttackStat() == 2900);
@@ -197,7 +218,7 @@ void TestNtag215TagConversionAndCryptoRoundTrip() {
     assert(slots[0] == 162 && slots[1] == 81);
     std::remove(enc_file.c_str());
 
-    std::cout << "[PASS] TestNtag215TagConversionAndCryptoRoundTrip (Built-in Retail Key AES-128-CTR + HMAC-SHA256)\n";
+    std::cout << "[PASS] TestNtag215TagConversionAndCryptoRoundTrip (Canonical Retail Key MD5 45fd53569f5765eef9c337bd5172f937)\n";
 }
 
 void TestPersonalityScoringBranches() {
@@ -261,7 +282,7 @@ void TestTrainingSimulation500Games60Fps() {
     ssbu::AmiiboBin bin;
     bin.InitializeBlankFighter(0x0000, 0); // Mario
     bin.SetStats(2500, 2500, true);
-    bin.SetSpiritSlots(20, 81, 0, true);
+    bin.SetSpiritSlots(20, 81, 0, true); // Autoheal (20) + Landing Lag Down (81)
 
     ssbu::TrainingConfig cfg{};
     cfg.num_games = 500;
@@ -276,7 +297,7 @@ void TestTrainingSimulation500Games60Fps() {
     assert(sum.total_games == 500);
     assert(sum.wins + sum.losses == 500);
     assert(sum.final_level == 50);
-    assert(sum.total_frames_simulated > 200000);
+    assert(sum.total_frames_simulated > 200000); // Hundreds of thousands of 60 FPS frames simulated
     assert(sum.total_hits_landed > 2000);
     assert(sum.total_grabs_landed > 0);
     assert(sum.total_ledge_recoveries > 0);
@@ -287,8 +308,10 @@ void TestTrainingSimulation500Games60Fps() {
     assert(bin.HasOwnerMii());
     assert(bin.VerifyOwnerMiiCrc16());
     assert(bin.VerifyOwnerMiiBitfields());
+    assert(bin.VerifyRetailKeyHash());
+    assert(bin.VerifyNtag215PwdPack());
     assert(bin.VerifySwitchCompatibility());
-    assert(!bin.GetLearningEnabled());
+    assert(!bin.GetLearningEnabled()); // Frozen after training
 #ifdef _WIN32
     assert(sum.executed_on_gpu);
 #endif
@@ -298,7 +321,7 @@ void TestTrainingSimulation500Games60Fps() {
     assert(trained_bp.attack_out_cliff > 0.55f);
     assert(trained_bp.meteor_master > 0.55f);
 
-    const std::string tmp_file = "test_trained_amiibo_v23.bin";
+    const std::string tmp_file = "test_trained_amiibo_v24.bin";
     std::string err;
     bool saved = bin.SaveToFile(tmp_file, &err);
     assert(saved);
@@ -326,7 +349,7 @@ void TestTrainingSimulation500Games60Fps() {
 } // namespace
 
 int main() {
-    std::cout << "Running SSBU Amiibo Trainer v2.3 (Switch-Verified + 60 FPS GPU Physics) C++20 Unit & Integration Tests...\n";
+    std::cout << "Running SSBU Amiibo Trainer v2.4 (Switch nn::nfp Verified + 60 FPS GPU Physics) C++20 Unit & Integration Tests...\n";
     TestSpiritCatalogAndRoster();
     TestSwitchNfpCompatibilityAndAutoMii();
     TestBitfieldPackingAndStats();
@@ -334,6 +357,6 @@ int main() {
     TestPersonalityScoringBranches();
     TestGpuFirstComputeEngine();
     TestTrainingSimulation500Games60Fps();
-    std::cout << "All SSBU Amiibo Trainer v2.3 tests passed!\n";
+    std::cout << "All SSBU Amiibo Trainer v2.4 tests passed!\n";
     return 0;
 }
