@@ -107,6 +107,7 @@ public:
     // Owner Mii & Amiibo Nickname Auto-Pairing (0x02C..0x0AB in Internal Layout)
     bool HasOwnerMii() const;
     bool VerifyOwnerMiiCrc16() const;
+    bool VerifyOwnerMiiBitfields() const;
     uint16_t GetOwnerMiiCrc16() const;
     std::string GetAmiiboNickname() const;
     void SetAmiiboNickname(const std::string& nickname);
@@ -115,7 +116,11 @@ public:
     void AutoPairOwnerMii(const std::string& mii_name = "SwitchMii", const std::string& nickname = "");
     void EnsureOwnerMiiPaired();
 
-    // Retail key support (160-byte key_retail.bin via nfc3d DRBG + AES-128-CTR + HMAC-SHA256)
+    // Full Nintendo Switch nn::nfp & NTAG215 Hardware/Cryptographic Verification
+    bool VerifySwitchCompatibility(std::string* diagnostic_out = nullptr) const;
+    uint32_t GetAppDataCrc32() const;
+
+    // Retail key support (Built-in 160-byte key_retail.bin via nfc3d DRBG + AES-128-CTR + HMAC-SHA256)
     bool LoadRetailKey(const std::string& key_path, std::string* error_out = nullptr);
     bool TryAutoLoadRetailKey();
     void SetRetailKeyBytes(const std::vector<uint8_t>& key_bytes);
@@ -189,6 +194,7 @@ private:
     void WriteBits(size_t start_byte, int start_bit_in_first,
                    size_t end_byte, int end_bit_in_last, uint32_t value);
 
+    void EnsureValidNtag215HeaderAndLockBytes();
     void UpdateChecksumsAndCrypto();
 };
 

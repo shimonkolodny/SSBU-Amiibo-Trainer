@@ -40,15 +40,20 @@ struct TrainingConfig {
 };
 
 struct MatchResult {
-    int game_index;
-    const char* opponent_name;
-    bool amiibo_won;
-    int amiibo_stocks_left;
-    int opponent_stocks_left;
-    float damage_dealt;
-    float damage_taken;
-    int parries_landed;
-    int meteors_landed;
+    int game_index = 0;
+    const char* opponent_name = "Mario";
+    bool amiibo_won = false;
+    int amiibo_stocks_left = 0;
+    int opponent_stocks_left = 0;
+    float damage_dealt = 0.0f;
+    float damage_taken = 0.0f;
+    int parries_landed = 0;
+    int meteors_landed = 0;
+    int frames_simulated = 0;
+    int hits_landed = 0;
+    int grabs_landed = 0;
+    int ledge_recoveries = 0;
+    const char* signature_ko_move = "Forward Smash";
 };
 
 struct TrainingSummary {
@@ -61,6 +66,10 @@ struct TrainingSummary {
     float avg_damage_taken = 0.0f;
     int total_parries = 0;
     int total_meteors = 0;
+    uint64_t total_frames_simulated = 0;
+    int total_hits_landed = 0;
+    int total_grabs_landed = 0;
+    int total_ledge_recoveries = 0;
     int initial_level = 1;
     int final_level = 50;
     int initial_cpu_level = 1;
@@ -86,6 +95,7 @@ public:
 
     static const char* ArchetypeToString(OpponentArchetype a);
     static const char* FocusToString(TrainingFocus f);
+    static const char* MoveIdToName(uint32_t move_id);
 };
 
 } // namespace ssbu
