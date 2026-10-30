@@ -26,20 +26,24 @@ jobs:
       - name: Build Binaries
         run: cmake --build build --config Release
 
-      - name: Run Unit, Auto-Mii, GPU Compute & 500-Game Training Integration Tests
+      - name: Run Unit, GPU Compute & 500-Game Training Integration Tests
         working-directory: build
         run: ctest -C Release --output-on-failure --verbose
 
-      - name: Run End-to-End Auto-Mii + GPU-First CLI Training Verification (500 Games + Spirits)
+      - name: Run End-to-End GPU-First CLI Training Verification (500 Games + Spirits)
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
             ./build/Release/ssbu_amiibo_trainer.exe --gpu-info
-            ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Sephiroth" --opponent "Kazuya" --mii-name "Shimon" --nickname "OneWing" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
+            ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Sephiroth" --opponent "Kazuya" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
             ./build/Release/ssbu_amiibo_trainer.exe --in trained_sephiroth_lv50.bin --inspect
+            ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Mario" --opponent "Fox" --games 500 --archetype balanced --focus optimal --primary-spirit "Galeem" --spirits 20,81,0 --out trained_mario_lv50.bin
+            ./build/Release/ssbu_amiibo_trainer.exe --in trained_mario_lv50.bin --inspect
           else
             ./build/ssbu_amiibo_trainer --gpu-info
-            ./build/ssbu_amiibo_trainer --backend auto --fighter "Sephiroth" --opponent "Kazuya" --mii-name "Shimon" --nickname "OneWing" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
+            ./build/ssbu_amiibo_trainer --backend auto --fighter "Sephiroth" --opponent "Kazuya" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
             ./build/ssbu_amiibo_trainer --in trained_sephiroth_lv50.bin --inspect
+            ./build/ssbu_amiibo_trainer --backend auto --fighter "Mario" --opponent "Fox" --games 500 --archetype balanced --focus optimal --primary-spirit "Galeem" --spirits 20,81,0 --out trained_mario_lv50.bin
+            ./build/ssbu_amiibo_trainer --in trained_mario_lv50.bin --inspect
           fi
         shell: bash
 
@@ -51,3 +55,4 @@ jobs:
           path: |
             build/Release/ssbu_amiibo_trainer.exe
             trained_sephiroth_lv50.bin
+            trained_mario_lv50.bin

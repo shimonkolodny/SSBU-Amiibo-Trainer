@@ -130,7 +130,9 @@ public:
     bool WasLoadedEncrypted() const { return was_loaded_encrypted_; }
     std::string GetFormatStatusString() const;
 
-    // Metadata & Settings
+    // Metadata & Settings (64-bit Amiibo Figure ID at 0x1DC..0x1E3 in Internal Layout)
+    uint64_t GetAmiiboId() const;
+    void SetAmiiboId(uint64_t amiibo_id);
     uint16_t GetCharacterId() const;
     void SetCharacterId(uint16_t char_id);
 

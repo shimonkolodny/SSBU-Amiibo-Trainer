@@ -24,7 +24,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow);
 namespace {
 
 void PrintUsage(const char* prog) {
-    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.3 (Switch-Verified + 60 FPS GPU Sim)\n"
+    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.5 (Switch-Verified + 60 FPS GPU Sim)\n"
               << "Usage:\n"
               << "  " << prog << " --gui                        Launch native Windows GUI (default on Windows)\n"
               << "  " << prog << " [options]                    Run headless CLI training & spirit customization\n\n"
@@ -101,7 +101,7 @@ void PrintDiagnosticSummary(const ssbu::AmiiboBin& bin) {
               << "  Compute Probe   : " << gpu.backend_name << " (" << gpu.adapter_name << ")\n"
               << "  Fighter         : " << (f ? f->name : "Unknown")
               << " (0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
-              << bin.GetCharacterId() << std::dec << std::setfill(' ') << ")\n"
+              << bin.GetCharacterId() << " | AmiiboID: 0x" << std::setw(16) << bin.GetAmiiboId() << std::dec << std::setfill(' ') << ")\n"
               << "  Level / CPU Lv  : Lv " << bin.GetDisplayedLevel()
               << " (" << bin.GetLevelExperience() << " XP) / CPU Lv " << bin.GetCpuLevel() << "\n"
               << "  Learning        : " << (bin.GetLearningEnabled() ? "ON" : "OFF (Frozen)") << "\n"

@@ -33,7 +33,8 @@ struct PrimarySpiritPreset {
 };
 
 struct FighterInfo {
-    uint16_t char_id;
+    uint16_t char_id;       // Unique 16-bit fighter lookup key
+    uint64_t amiibo_id;     // Canonical 64-bit Amiibo ID (0x1DC..0x1E3 big-endian) from characters.json
     const char* roster_num;
     const char* name;
     float weight_class;     // 0.65 (light) .. 1.40 (super heavy)
@@ -53,7 +54,9 @@ const PrimarySpiritPreset* FindPrimarySpiritByName(const std::string& query);
 
 const std::vector<FighterInfo>& GetFighterCatalog();
 const FighterInfo* FindFighterById(uint16_t char_id);
+const FighterInfo* FindFighterByAmiiboId(uint64_t amiibo_id);
 const FighterInfo* FindFighterByName(const std::string& query);
+bool IsCanonicalSsbuAmiiboId(uint64_t amiibo_id);
 
 const char* SpiritTypeToString(SpiritType t);
 

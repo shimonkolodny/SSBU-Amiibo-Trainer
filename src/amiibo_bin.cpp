@@ -68,105 +68,10 @@ constexpr uint8_t kLegacyV23Key[160] = {
     0xEF,0x39,0x2F,0xA2,0xB1,0x28,0xE2,0xF7,0x88,0xC0,0xD4,0x4A,0x5A,0xC5,0xC3,0x52
 };
 
-// Canonical Super Smash Bros. Amiibo 16-bit Model Number lookup for 8-byte Figure ID
-static uint16_t LookupSmashAmiiboModelNumber(uint16_t char_id) {
-    switch (char_id) {
-        case 0x0000: return 0x0000; // Mario
-        case 0x0002: return 0x0001; // Peach
-        case 0x0003: return 0x0002; // Yoshi
-        case 0x0008: return 0x0003; // Donkey Kong
-        case 0x0100: return 0x0004; // Link
-        case 0x0580: return 0x0005; // Fox
-        case 0x0500: return 0x0006; // Samus
-        case 0x07C0: return 0x0007; // Wii Fit Trainer
-        case 0x0180: return 0x0008; // Villager
-        case 0x1919: return 0x0009; // Pikachu
-        case 0x1F00: return 0x000A; // Kirby
-        case 0x2100: return 0x000B; // Marth
-        case 0x0101: return 0x000C; // Zelda
-        case 0x0009: return 0x000D; // Diddy Kong
-        case 0x0001: return 0x000E; // Luigi
-        case 0x06C0: return 0x000F; // Little Mac
-        case 0x0640: return 0x0010; // Pit
-        case 0x0600: return 0x0011; // Captain Falcon
-        case 0x0004: return 0x0012; // Rosalina & Luma
-        case 0x0005: return 0x0013; // Bowser
-        case 0x1A04: return 0x0014; // Lucario
-        case 0x0105: return 0x0015; // Toon Link
-        case 0x0102: return 0x0016; // Sheik
-        case 0x2103: return 0x0017; // Ike
-        case 0x2240: return 0x0018; // Shulk
-        case 0x3200: return 0x0019; // Sonic
-        case 0x3480: return 0x001A; // Mega Man
-        case 0x1F01: return 0x001B; // King Dedede
-        case 0x1F02: return 0x001C; // Meta Knight
-        case 0x2104: return 0x001D; // Robin
-        case 0x2101: return 0x001E; // Lucina
-        case 0x0007: return 0x001F; // Wario
-        case 0x1906: return 0x0020; // Charizard
-        case 0x2280: return 0x0021; // Ness
-        case 0x3340: return 0x0022; // Pac-Man
-        case 0x1B92: return 0x0023; // Greninja
-        case 0x1996: return 0x0024; // Jigglypuff
-        case 0x0642: return 0x0025; // Palutena
-        case 0x0641: return 0x0026; // Dark Pit
-        case 0x0502: return 0x0027; // Zero Suit Samus
-        case 0x0103: return 0x0028; // Ganondorf
-        case 0x000E: return 0x0029; // Dr. Mario
-        case 0x0006: return 0x002A; // Bowser Jr.
-        case 0x0680: return 0x002B; // Olimar
-        case 0x0700: return 0x002C; // Mii Brawler
-        case 0x0701: return 0x002D; // Mii Swordfighter
-        case 0x0702: return 0x002E; // Mii Gunner
-        case 0x199A: return 0x002F; // Mewtwo
-        case 0x0581: return 0x0030; // Falco
-        case 0x2281: return 0x0031; // Lucas
-        case 0x0781: return 0x0032; // R.O.B.
-        case 0x0740: return 0x0035; // Mr. Game & Watch
-        case 0x0782: return 0x0036; // Duck Hunt
-        case 0x2102: return 0x0033; // Roy
-        case 0x34C0: return 0x0034; // Ryu
-        case 0x3600: return 0x025F; // Cloud
-        case 0x2107: return 0x0261; // Corrin
-        case 0x3680: return 0x0263; // Bayonetta
-        case 0x0800: return 0x0355; // Inkling
-        case 0x0503: return 0x0356; // Ridley
-        case 0x0582: return 0x0357; // Wolf
-        case 0x0780: return 0x036A; // King K. Rool
-        case 0x2300: return 0x036B; // Ice Climbers
-        case 0x0015: return 0x036C; // Piranha Plant
-        case 0x19AC: return 0x036D; // Pichu
-        case 0x0104: return 0x036E; // Young Link
-        case 0x0013: return 0x036F; // Daisy
-        case 0x34C1: return 0x0370; // Ken
-        case 0x0181: return 0x0371; // Isabelle
-        case 0x1907: return 0x0373; // Squirtle
-        case 0x1902: return 0x0374; // Ivysaur
-        case 0x3240: return 0x0375; // Snake
-        case 0x3700: return 0x0376; // Simon
-        case 0x1C13: return 0x0377; // Incineroar
-        case 0x2105: return 0x0378; // Chrom
-        case 0x0501: return 0x0379; // Dark Samus
-        case 0x3701: return 0x037A; // Richter
-        case 0x3740: return 0x037B; // Joker
-        case 0x3780: return 0x037C; // Hero
-        case 0x37C0: return 0x03A6; // Banjo & Kazooie
-        case 0x3800: return 0x03A7; // Terry
-        case 0x2106: return 0x03A8; // Byleth
-        case 0x3840: return 0x0414; // Min Min
-        case 0x38C0: return 0x0415; // Steve
-        case 0x3601: return 0x0416; // Sephiroth
-        case 0x2241: return 0x0417; // Pyra
-        case 0x2242: return 0x0418; // Mythra
-        case 0x3900: return 0x0419; // Kazuya
-        case 0x3940: return 0x041A; // Sora
-        default:     return static_cast<uint16_t>((char_id & 0x03FFu) + 1u);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // CRC-16-CCITT (0x1021, init 0x0000) for 96-byte 3DS/WiiU/Switch Mii StoreData
-// & IEEE 802.3 CRC-32 for Amiibo Application Data
+// & Exact SSBU Application Area CRC-32 (init 0x00000000, poly 0xEDB88320, xorout 0xFFFFFFFF,
+// little-endian at 0x0DC..0x0DF over 212 bytes 0x0E0..0x1B3, per jozz024/smash-amiibo-editor/utils/ssbu_amiibo.py)
 // ---------------------------------------------------------------------------
 static uint16_t ComputeCrc16Ccitt(const uint8_t* bytes, size_t len) {
     uint16_t crc = 0x0000;
@@ -180,16 +85,17 @@ static uint16_t ComputeCrc16Ccitt(const uint8_t* bytes, size_t len) {
     return crc;
 }
 
-static uint32_t ComputeCrc32(const uint8_t* bytes, size_t len) {
-    uint32_t crc = 0xFFFFFFFFu;
+static uint32_t ComputeSsbuAppCrc32(const uint8_t* bytes, size_t len) {
+    uint32_t t = 0x00000000u;
     for (size_t i = 0; i < len; ++i) {
-        crc ^= bytes[i];
+        uint32_t t0 = (t ^ bytes[i]) & 0xFFu;
         for (int b = 0; b < 8; ++b) {
-            if (crc & 1u) crc = (crc >> 1) ^ 0xEDB88320u;
-            else          crc >>= 1;
+            if (t0 & 1u) t0 = (t0 >> 1) ^ 0xEDB88320u;
+            else         t0 >>= 1;
         }
+        t = (t >> 8) ^ t0;
     }
-    return ~crc;
+    return t ^ 0xFFFFFFFFu;
 }
 
 // ---------------------------------------------------------------------------
@@ -656,16 +562,21 @@ void AmiiboBin::EnsureValidNtag215HeaderAndLockBytes() {
 
     // 4. Amiibo structure magic byte 0xA5 at 0x028 (tag[0x010])
     data_[0x028] = 0xA5;
+    // If migrating a v2.1-v2.4 .bin that had 0x0DC..0x0DF zeroed and old CRC at 0x034..0x037, clear 0x034..0x037
+    if (data_[0x0DC] == 0 && data_[0x0DD] == 0 && data_[0x0DE] == 0 && data_[0x0DF] == 0) {
+        std::memset(data_.data() + 0x034, 0, 4);
+    }
 
-    // 5. Ensure 8-byte Amiibo Figure ID at 0x1DC..0x1E3 (tag[0x054..0x05B]) has mandatory 0x02 marker at 0x1E3
+    // 5. Ensure 8-byte Amiibo Figure ID at 0x1DC..0x1E3 (tag[0x054..0x05B]) is a canonical 64-bit SSBU ID
+    uint64_t cur_aid = GetAmiiboId();
+    if (!IsCanonicalSsbuAmiiboId(cur_aid)) {
+        const auto* f = FindFighterByAmiiboId(cur_aid);
+        if (f) {
+            SetAmiiboId(f->amiibo_id);
+        }
+    }
     data_[0x1E3] = 0x02;
     uint16_t cid = GetCharacterId();
-    uint16_t model_no = (static_cast<uint16_t>(data_[0x1E0]) << 8) | data_[0x1E1];
-    if (model_no == 0 && cid != 0x0000) {
-        uint16_t canonical_model = LookupSmashAmiiboModelNumber(cid);
-        data_[0x1E0] = static_cast<uint8_t>((canonical_model >> 8) & 0xFF);
-        data_[0x1E1] = static_cast<uint8_t>(canonical_model & 0xFF);
-    }
 
     // 6. Ensure 32-byte Keygen Salt at 0x1E8..0x207 (tag[0x060..0x07F]) is non-zero
     bool salt_non_zero = false;
@@ -728,7 +639,7 @@ void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
     data_[0x02F] = 0x01; // CRC Counter >= 1
 
     // Super Smash Bros. Ultimate 64-bit Program/Title ID (0x01006A800016E000) at 0x0AC..0x0B3
-    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x00, 0x16, 0xE0, 0x00};
+    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x30, 0x16, 0xE0, 0x00};
     std::memcpy(data_.data() + 0x0AC, kSsbuTitleId, 8);
 
     // SSBU App Access ID (0x34F80200) at 0x0B6..0x0B9 in Internal Format
@@ -822,14 +733,16 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
             EnsureValidNtag215HeaderAndLockBytes();
             was_loaded_encrypted_ = true;
             loaded_as_tag_layout_ = true;
-            // Ensure SSBU AppID & Title ID are populated if this was a fresh uninitialized retail Amiibo dump
-            if (data_[0x0B6] != 0x34 || data_[0x0B7] != 0xF8) {
-                const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x00, 0x16, 0xE0, 0x00};
+            // Ensure SSBU AppID & Title ID are populated if this was a fresh or non-SSBU retail Amiibo dump
+            if (data_[0x0B6] != 0x34 || data_[0x0B7] != 0xF8 || data_[0x0B8] != 0x02 || data_[0x0B9] != 0x00) {
+                data_[0x02C] |= 0x20;
+                const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x30, 0x16, 0xE0, 0x00};
                 std::memcpy(data_.data() + 0x0AC, kSsbuTitleId, 8);
                 data_[0x0B6] = 0x34;
                 data_[0x0B7] = 0xF8;
                 data_[0x0B8] = 0x02;
                 data_[0x0B9] = 0x00;
+                std::memset(data_.data() + 0x0DC, 0, 0x0D8);
                 SetLearningEnabled(true);
                 SetDisplayedLevel(1);
                 SetCpuLevel(1);
@@ -856,7 +769,12 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
     }
 
     // 4. Virgin/unencrypted NTAG215 dump: preserve UID (tag 0x00..0x07) and 8-byte Figure ID + Salt (tag 0x54..0x7F)
-    uint16_t tag_char_id = (static_cast<uint16_t>(buf[0x054]) << 8) | buf[0x055];
+    uint64_t tag_amiibo_id = 0;
+    for (int i = 0; i < 8; ++i) {
+        tag_amiibo_id = (tag_amiibo_id << 8) | buf[0x054 + i];
+    }
+    const auto* tag_fighter = FindFighterByAmiiboId(tag_amiibo_id);
+    uint16_t tag_char_id = tag_fighter ? tag_fighter->char_id : static_cast<uint16_t>((buf[0x054] << 8) | buf[0x055]);
     InitializeBlankFighter(tag_char_id, 0);
     bool has_uid = (buf[0x000] == 0x04);
     if (has_uid) {
@@ -869,7 +787,9 @@ bool AmiiboBin::LoadFromFile(const std::string& path, std::string* error_out) {
     if (has_model) {
         std::memcpy(data_.data() + 0x1DC, buf.data() + 0x054, 0x2C);
     }
-    SetCharacterId(tag_char_id);
+    if (!IsCanonicalSsbuAmiiboId(GetAmiiboId()) && tag_fighter) {
+        SetAmiiboId(tag_fighter->amiibo_id);
+    }
     EnsureValidNtag215HeaderAndLockBytes();
     EnsureOwnerMiiPaired();
     UpdateChecksumsAndCrypto();
@@ -1111,7 +1031,7 @@ void AmiiboBin::AutoPairOwnerMii(const std::string& mii_name, const std::string&
     SetAmiiboNickname(nick);
 
     // Ensure SSBU Title ID (0x01006A800016E000) is set at 0x0AC..0x0B3
-    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x00, 0x16, 0xE0, 0x00};
+    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x30, 0x16, 0xE0, 0x00};
     std::memcpy(data_.data() + 0x0AC, kSsbuTitleId, 8);
 }
 
@@ -1126,7 +1046,28 @@ void AmiiboBin::EnsureOwnerMiiPaired() {
     }
 }
 
+uint64_t AmiiboBin::GetAmiiboId() const {
+    uint64_t val = 0;
+    for (int i = 0; i < 8; ++i) {
+        val = (val << 8) | data_[0x1DC + i];
+    }
+    return val;
+}
+
+void AmiiboBin::SetAmiiboId(uint64_t amiibo_id) {
+    // Store all 8 bytes of the canonical 64-bit Amiibo ID in Internal Layout (0x1DC..0x1E3).
+    // NEVER write to 0x054..0x05B in data_ because 0x04C..0x0AB in Internal Layout is the 96-byte Owner Mii!
+    for (int i = 7; i >= 0; --i) {
+        data_[0x1DC + i] = static_cast<uint8_t>(amiibo_id & 0xFFu);
+        amiibo_id >>= 8;
+    }
+    data_[0x1E3] = 0x02; // Mandatory Amiibo Figure ID constant
+}
+
 uint16_t AmiiboBin::GetCharacterId() const {
+    uint64_t aid = GetAmiiboId();
+    const auto* f = FindFighterByAmiiboId(aid);
+    if (f) return f->char_id;
     return (static_cast<uint16_t>(data_[0x1DC]) << 8) | data_[0x1DD];
 }
 
@@ -1135,24 +1076,20 @@ void AmiiboBin::SetCharacterId(uint16_t char_id) {
     const auto* prev_f = FindFighterById(prev_id);
     std::string cur_nick = GetAmiiboNickname();
 
-    // Store in Internal Layout Figure ID offset (0x1DC..0x1E3).
-    // NEVER write to 0x054..0x055 in data_ because 0x04C..0x0AB in Internal Layout is the 96-byte Owner Mii!
-    data_[0x1DC] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
-    data_[0x1DD] = static_cast<uint8_t>(char_id & 0xFF);
-
-    if (prev_id != char_id || (data_[0x1E0] == 0 && data_[0x1E1] == 0 && char_id != 0x0000)) {
-        uint16_t model_no = LookupSmashAmiiboModelNumber(char_id);
-        data_[0x1DE] = 0x00; // Character variant
-        data_[0x1DF] = 0x00; // Figure type (0x00 = Figure)
-        data_[0x1E0] = static_cast<uint8_t>((model_no >> 8) & 0xFF);
-        data_[0x1E1] = static_cast<uint8_t>(model_no & 0xFF);
-        data_[0x1E2] = 0x00; // Series (0x00 = Super Smash Bros.)
-    }
-    data_[0x1E3] = 0x02; // Mandatory Amiibo Figure ID constant
-
     const auto* new_f = FindFighterById(char_id);
-    if (new_f && (cur_nick.empty() || (prev_f && cur_nick == std::string(prev_f->name).substr(0, 10)))) {
-        SetAmiiboNickname(new_f->name);
+    if (new_f) {
+        uint64_t cur_aid = GetAmiiboId();
+        // Preserve existing 64-bit ID if it is already a canonical SSBU variant for this exact fighter
+        if (!(IsCanonicalSsbuAmiiboId(cur_aid) && FindFighterByAmiiboId(cur_aid) == new_f)) {
+            SetAmiiboId(new_f->amiibo_id);
+        }
+        if (cur_nick.empty() || (prev_f && cur_nick == std::string(prev_f->name).substr(0, 10))) {
+            SetAmiiboNickname(new_f->name);
+        }
+    } else {
+        data_[0x1DC] = static_cast<uint8_t>((char_id >> 8) & 0xFF);
+        data_[0x1DD] = static_cast<uint8_t>(char_id & 0xFF);
+        data_[0x1E3] = 0x02;
     }
 }
 
@@ -1562,11 +1499,12 @@ void AmiiboBin::EncodeBehavior(const AmiiboBehaviorParams& in_params) {
     wr_norm(0x1A0, 5, 0x1A1, 7, 7, p.appeal_hi / 100.0f);
     wr_norm(0x1A1, 6, 0x1A1, 0, 7, p.appeal_lw / 100.0f);
 
-    uint32_t app_crc32 = ComputeCrc32(data_.data() + 0x0DC, 0x0D8);
-    data_[0x034] = static_cast<uint8_t>((app_crc32 >> 24) & 0xFF);
-    data_[0x035] = static_cast<uint8_t>((app_crc32 >> 16) & 0xFF);
-    data_[0x036] = static_cast<uint8_t>((app_crc32 >> 8) & 0xFF);
-    data_[0x037] = static_cast<uint8_t>(app_crc32 & 0xFF);
+    // Recompute SSBU 32-bit Application Area Checksum over 0x0E0..0x1B3 (212 bytes, little-endian at 0x0DC..0x0DF)
+    uint32_t app_crc32 = ComputeSsbuAppCrc32(data_.data() + 0x0E0, 0x0D4);
+    data_[0x0DC] = static_cast<uint8_t>(app_crc32 & 0xFFu);
+    data_[0x0DD] = static_cast<uint8_t>((app_crc32 >> 8) & 0xFFu);
+    data_[0x0DE] = static_cast<uint8_t>((app_crc32 >> 16) & 0xFFu);
+    data_[0x0DF] = static_cast<uint8_t>((app_crc32 >> 24) & 0xFFu);
 }
 
 // Exact 25-state SSBU Personality Evaluator matching jozz024/smash-amiibo-editor/resources/personality_data.json
@@ -1794,10 +1732,10 @@ std::string AmiiboBin::EvaluatePersonality() const {
 }
 
 uint32_t AmiiboBin::GetAppDataCrc32() const {
-    return (static_cast<uint32_t>(data_[0x034]) << 24) |
-           (static_cast<uint32_t>(data_[0x035]) << 16) |
-           (static_cast<uint32_t>(data_[0x036]) << 8)  |
-           static_cast<uint32_t>(data_[0x037]);
+    return static_cast<uint32_t>(data_[0x0DC]) |
+           (static_cast<uint32_t>(data_[0x0DD]) << 8) |
+           (static_cast<uint32_t>(data_[0x0DE]) << 16) |
+           (static_cast<uint32_t>(data_[0x0DF]) << 24);
 }
 
 bool AmiiboBin::VerifySwitchCompatibility(std::string* diagnostic_out) const {
@@ -1828,17 +1766,25 @@ bool AmiiboBin::VerifySwitchCompatibility(std::string* diagnostic_out) const {
     uint8_t unpacked[kStandardAmiiboSize]{};
     bool crypto_ok = Nfc3dUnpack(keys, packed_tag, unpacked);
 
-    // Check 3: 8-Byte Amiibo Figure ID (tag[0x05B] == 0x02)
-    bool fig_id_ok = (packed_tag[0x05B] == 0x02);
+    // Check 3: 8-Byte Amiibo Figure ID (must be in canonical 162-entry SSBU characters.json table & end in 0x02)
+    bool fig_id_ok = (packed_tag[0x05B] == 0x02) && IsCanonicalSsbuAmiiboId(GetAmiiboId());
 
     // Check 4: Owner Mii Ver3StoreData Bitfields & CRC-16-CCITT
     bool mii_ok = HasOwnerMii() && VerifyOwnerMiiCrc16() && VerifyOwnerMiiBitfields();
 
-    // Check 5: SSBU AppID (0x34F80200) & AppData CRC-32
-    bool appid_ok = (unpacked[0x0B6] == 0x34 && unpacked[0x0B7] == 0xF8 &&
+    // Check 5: SSBU Title ID (01006A803016E000), AppID (0x34F80200), & Little-Endian SSBU AppData CRC-32 at 0x0DC..0x0DF
+    bool appid_ok = (unpacked[0x0AC] == 0x01 && unpacked[0x0AD] == 0x00 &&
+                     unpacked[0x0AE] == 0x6A && unpacked[0x0AF] == 0x80 &&
+                     unpacked[0x0B0] == 0x30 && unpacked[0x0B1] == 0x16 &&
+                     unpacked[0x0B2] == 0xE0 && unpacked[0x0B3] == 0x00 &&
+                     unpacked[0x0B6] == 0x34 && unpacked[0x0B7] == 0xF8 &&
                      unpacked[0x0B8] == 0x02 && unpacked[0x0B9] == 0x00);
-    uint32_t expected_crc32 = ComputeCrc32(unpacked + 0x0DC, 0x0D8);
-    bool crc32_ok = (GetAppDataCrc32() == expected_crc32);
+    uint32_t expected_crc32 = ComputeSsbuAppCrc32(unpacked + 0x0E0, 0x0D4);
+    uint32_t stored_crc32 = static_cast<uint32_t>(unpacked[0x0DC]) |
+                            (static_cast<uint32_t>(unpacked[0x0DD]) << 8) |
+                            (static_cast<uint32_t>(unpacked[0x0DE]) << 16) |
+                            (static_cast<uint32_t>(unpacked[0x0DF]) << 24);
+    bool crc32_ok = (stored_crc32 == expected_crc32 && GetAppDataCrc32() == expected_crc32);
 
     // Check 6: NTAG215 Page 133 PWD & Page 134 PACK (0x8080)
     bool pwd_pack_ok = VerifyNtag215PwdPack();
@@ -1863,7 +1809,9 @@ void AmiiboBin::UpdateChecksumsAndCrypto() {
     EnsureValidNtag215HeaderAndLockBytes();
     EnsureOwnerMiiPaired();
 
-    // Ensure SSBU AppID (0x34F80200) is set at 0x0B6..0x0B9
+    // Ensure SSBU Title/Program ID (01006A803016E000) at 0x0AC..0x0B3 and AppID (34F80200) at 0x0B6..0x0B9
+    const uint8_t kSsbuTitleId[8] = {0x01, 0x00, 0x6A, 0x80, 0x30, 0x16, 0xE0, 0x00};
+    std::memcpy(data_.data() + 0x0AC, kSsbuTitleId, 8);
     data_[0x0B6] = 0x34;
     data_[0x0B7] = 0xF8;
     data_[0x0B8] = 0x02;
@@ -1885,13 +1833,13 @@ void AmiiboBin::UpdateChecksumsAndCrypto() {
     data_[0x0B4] = static_cast<uint8_t>((wc >> 8) & 0xFF);
     data_[0x0B5] = static_cast<uint8_t>(wc & 0xFF);
 
-    // Recompute 32-bit Application Data CRC-32 over 0x0DC..0x1B3 (216 bytes) at 0x034..0x037
-    // Note: Do NOT overwrite 0x0DC..0x0DF; those 4 bytes belong to SSBU's Application Area!
-    uint32_t app_crc32 = ComputeCrc32(data_.data() + 0x0DC, 0x0D8);
-    data_[0x034] = static_cast<uint8_t>((app_crc32 >> 24) & 0xFF);
-    data_[0x035] = static_cast<uint8_t>((app_crc32 >> 16) & 0xFF);
-    data_[0x036] = static_cast<uint8_t>((app_crc32 >> 8) & 0xFF);
-    data_[0x037] = static_cast<uint8_t>(app_crc32 & 0xFF);
+    // Recompute SSBU 32-bit Application Area Checksum over 0x0E0..0x1B3 (212 bytes, little-endian at 0x0DC..0x0DF)
+    // matching jozz024/smash-amiibo-editor/utils/ssbu_amiibo.py (_calculate_crc32)
+    uint32_t app_crc32 = ComputeSsbuAppCrc32(data_.data() + 0x0E0, 0x0D4);
+    data_[0x0DC] = static_cast<uint8_t>(app_crc32 & 0xFFu);
+    data_[0x0DD] = static_cast<uint8_t>((app_crc32 >> 8) & 0xFFu);
+    data_[0x0DE] = static_cast<uint8_t>((app_crc32 >> 16) & 0xFFu);
+    data_[0x0DF] = static_cast<uint8_t>((app_crc32 >> 24) & 0xFFu);
 
     // Compute authentic NTAG215 Tag HMAC (0x1B4..0x1D3) & Data HMAC (0x008..0x027) in Internal Layout
     Nfc3dAmiiboKeys keys{};

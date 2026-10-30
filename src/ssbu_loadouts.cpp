@@ -371,106 +371,344 @@ const PrimarySpiritPreset* FindPrimarySpiritByName(const std::string& query) {
     return nullptr;
 }
 
-// Complete 89-Fighter SSBU Roster with NTAG215 Character IDs
+// Complete 91-Fighter SSBU Roster with Verbatim 64-Bit Amiibo IDs from
+// jozz024/smash-amiibo-editor/resources/characters.json & N3evin/AmiiboAPI
 const std::vector<FighterInfo>& GetFighterCatalog() {
     static const std::vector<FighterInfo> kFighters = {
-        {0x0000, "01",  "Mario",                1.00f, 1.05f, 0.35f, 1.15f},
-        {0x0008, "02",  "Donkey Kong",          1.32f, 1.00f, 0.05f, 1.40f},
-        {0x0100, "03",  "Link",                 1.06f, 0.90f, 0.75f, 1.00f},
-        {0x0500, "04",  "Samus",                1.10f, 0.95f, 0.85f, 1.20f},
-        {0x0501, "04E", "Dark Samus",           1.10f, 0.95f, 0.85f, 1.20f},
-        {0x0003, "05",  "Yoshi",                1.06f, 1.38f, 0.35f, 1.05f},
-        {0x1F00, "06",  "Kirby",                0.78f, 1.10f, 0.15f, 1.05f},
-        {0x0580, "07",  "Fox",                  0.77f, 1.35f, 0.30f, 1.00f},
-        {0x1919, "08",  "Pikachu",              0.79f, 1.30f, 0.45f, 1.15f},
-        {0x0001, "09",  "Luigi",                0.98f, 0.85f, 0.30f, 1.45f},
-        {0x2280, "10",  "Ness",                 0.94f, 1.15f, 0.60f, 1.30f},
-        {0x0600, "11",  "Captain Falcon",       1.06f, 1.25f, 0.00f, 1.20f},
-        {0x1996, "12",  "Jigglypuff",           0.68f, 1.45f, 0.00f, 0.90f},
-        {0x0002, "13",  "Peach",                0.90f, 1.25f, 0.40f, 1.10f},
-        {0x0013, "13E", "Daisy",                0.90f, 1.25f, 0.40f, 1.10f},
-        {0x0005, "14",  "Bowser",               1.40f, 0.95f, 0.25f, 1.35f},
-        {0x2300, "15",  "Ice Climbers",         0.92f, 0.95f, 0.35f, 1.25f},
-        {0x0102, "16",  "Sheik",                0.78f, 1.35f, 0.40f, 1.20f},
-        {0x0101, "17",  "Zelda",                0.86f, 0.90f, 0.70f, 1.05f},
-        {0x000E, "18",  "Dr. Mario",            1.00f, 0.90f, 0.40f, 1.15f},
-        {0x19AC, "19",  "Pichu",                0.65f, 1.32f, 0.45f, 1.15f},
-        {0x0581, "20",  "Falco",                0.82f, 1.25f, 0.40f, 1.15f},
-        {0x2100, "21",  "Marth",                0.90f, 1.15f, 0.05f, 1.05f},
-        {0x2101, "21E", "Lucina",               0.90f, 1.15f, 0.05f, 1.05f},
-        {0x0104, "22",  "Young Link",           0.88f, 1.10f, 0.85f, 1.05f},
-        {0x0103, "23",  "Ganondorf",            1.25f, 0.75f, 0.00f, 1.15f},
-        {0x199A, "24",  "Mewtwo",               0.79f, 1.25f, 0.55f, 1.20f},
-        {0x2102, "25",  "Roy",                  0.96f, 1.25f, 0.05f, 1.15f},
-        {0x2105, "25E", "Chrom",                0.96f, 1.25f, 0.05f, 1.10f},
-        {0x0740, "26",  "Mr. Game & Watch",     0.75f, 1.28f, 0.45f, 1.20f},
-        {0x1F02, "27",  "Meta Knight",          0.80f, 1.25f, 0.05f, 1.00f},
-        {0x0640, "28",  "Pit",                  0.96f, 1.15f, 0.55f, 1.15f},
-        {0x0641, "28E", "Dark Pit",             0.96f, 1.15f, 0.55f, 1.15f},
-        {0x0502, "29",  "Zero Suit Samus",      0.80f, 1.35f, 0.35f, 1.10f},
-        {0x0007, "30",  "Wario",                1.08f, 1.30f, 0.20f, 1.15f},
-        {0x3240, "31",  "Snake",                1.08f, 0.90f, 0.85f, 1.25f},
-        {0x2103, "32",  "Ike",                  1.12f, 1.05f, 0.10f, 1.15f},
-        {0x1907, "33",  "Pokemon Trainer (Squirtle)", 0.85f, 1.20f, 0.35f, 1.25f},
-        {0x1902, "34",  "Ivysaur",              0.96f, 1.05f, 0.55f, 1.20f},
-        {0x1906, "35",  "Charizard",            1.20f, 1.00f, 0.30f, 1.30f},
-        {0x0009, "36",  "Diddy Kong",           0.92f, 1.15f, 0.55f, 1.25f},
-        {0x2281, "37",  "Lucas",                0.94f, 1.15f, 0.65f, 1.25f},
-        {0x3200, "38",  "Sonic",                0.86f, 1.35f, 0.20f, 1.05f},
-        {0x1F01, "39",  "King Dedede",          1.35f, 0.80f, 0.45f, 1.15f},
-        {0x0680, "40",  "Olimar",               0.79f, 1.05f, 0.75f, 1.30f},
-        {0x1A04, "41",  "Lucario",              0.94f, 1.15f, 0.50f, 1.10f},
-        {0x0781, "42",  "R.O.B.",               1.08f, 1.15f, 0.75f, 1.25f},
-        {0x0105, "43",  "Toon Link",            0.91f, 1.15f, 0.80f, 1.10f},
-        {0x0582, "44",  "Wolf",                 0.94f, 1.20f, 0.50f, 1.15f},
-        {0x0180, "45",  "Villager",             0.92f, 1.10f, 0.85f, 1.10f},
-        {0x3480, "46",  "Mega Man",             1.04f, 1.00f, 0.90f, 1.05f},
-        {0x07C0, "47",  "Wii Fit Trainer",      0.96f, 1.10f, 0.65f, 1.10f},
-        {0x0004, "48",  "Rosalina & Luma",      0.82f, 1.15f, 0.50f, 1.10f},
-        {0x06C0, "49",  "Little Mac",           0.88f, 0.70f, 0.00f, 1.00f},
-        {0x1B92, "50",  "Greninja",             0.88f, 1.30f, 0.40f, 1.10f},
-        {0x0700, "51",  "Mii Brawler",          0.96f, 1.20f, 0.25f, 1.20f},
-        {0x0701, "52",  "Mii Swordfighter",     1.00f, 1.10f, 0.55f, 1.10f},
-        {0x0702, "53",  "Mii Gunner",           1.04f, 0.95f, 0.90f, 1.10f},
-        {0x0642, "54",  "Palutena",             0.91f, 1.25f, 0.55f, 1.25f},
-        {0x3340, "55",  "Pac-Man",              0.95f, 1.15f, 0.80f, 1.15f},
-        {0x2104, "56",  "Robin",                0.95f, 1.00f, 0.75f, 1.10f},
-        {0x2240, "57",  "Shulk",                0.98f, 1.20f, 0.05f, 1.10f},
-        {0x0006, "58",  "Bowser Jr.",           1.10f, 1.10f, 0.65f, 1.15f},
-        {0x0782, "59",  "Duck Hunt",            0.86f, 1.10f, 0.85f, 1.05f},
-        {0x34C0, "60",  "Ryu",                  1.05f, 0.95f, 0.45f, 1.15f},
-        {0x34C1, "60E", "Ken",                  1.05f, 1.00f, 0.35f, 1.15f},
-        {0x3600, "61",  "Cloud",                1.02f, 1.20f, 0.35f, 1.00f},
-        {0x2107, "62",  "Corrin",               0.98f, 1.10f, 0.35f, 1.10f},
-        {0x3680, "63",  "Bayonetta",            0.81f, 1.25f, 0.30f, 1.00f},
-        {0x0800, "64",  "Inkling",              0.94f, 1.25f, 0.50f, 1.20f},
-        {0x0503, "65",  "Ridley",               1.09f, 1.10f, 0.35f, 1.20f},
-        {0x3700, "66",  "Simon",                1.08f, 0.90f, 0.85f, 1.10f},
-        {0x3701, "66E", "Richter",              1.08f, 0.90f, 0.85f, 1.10f},
-        {0x0780, "67",  "King K. Rool",         1.38f, 0.85f, 0.65f, 1.25f},
-        {0x0181, "68",  "Isabelle",             0.88f, 1.10f, 0.70f, 1.15f},
-        {0x1C13, "69",  "Incineroar",           1.22f, 0.80f, 0.10f, 1.45f},
-        {0x0015, "70",  "Piranha Plant",        1.15f, 0.95f, 0.60f, 1.15f},
-        {0x3740, "71",  "Joker",                0.93f, 1.25f, 0.45f, 1.15f},
-        {0x3780, "72",  "Hero",                 1.01f, 1.00f, 0.75f, 1.10f},
-        {0x37C0, "73",  "Banjo & Kazooie",      1.06f, 1.05f, 0.65f, 1.15f},
-        {0x3800, "74",  "Terry",                1.08f, 1.05f, 0.35f, 1.15f},
-        {0x2106, "75",  "Byleth",               0.98f, 0.95f, 0.40f, 1.15f},
-        {0x3840, "76",  "Min Min",              1.04f, 0.95f, 0.75f, 1.20f},
-        {0x38C0, "77",  "Steve",                0.92f, 1.10f, 0.65f, 1.20f},
-        {0x3601, "78",  "Sephiroth",            0.79f, 1.15f, 0.55f, 1.10f},
-        {0x2241, "79",  "Pyra",                 0.98f, 1.15f, 0.35f, 1.15f},
-        {0x2242, "80",  "Mythra",               0.92f, 1.38f, 0.25f, 1.15f},
-        {0x3900, "81",  "Kazuya",               1.15f, 0.90f, 0.30f, 1.40f},
-        {0x3940, "82",  "Sora",                 0.85f, 1.35f, 0.45f, 1.05f}
+        {0x0000, 0x0000000000000002ULL, "01",  "Mario",                      1.00f, 1.05f, 0.35f, 1.15f},
+        {0x0008, 0x0008000000030002ULL, "02",  "Donkey Kong",                1.32f, 1.00f, 0.05f, 1.40f},
+        {0x0100, 0x0100000000040002ULL, "03",  "Link",                       1.06f, 0.90f, 0.75f, 1.00f},
+        {0x05C0, 0x05C0000000060002ULL, "04",  "Samus",                      1.10f, 0.95f, 0.85f, 1.20f},
+        {0x05C3, 0x05C3000003800002ULL, "04E", "Dark Samus",                 1.10f, 0.95f, 0.85f, 1.20f},
+        {0x0003, 0x0003000000020002ULL, "05",  "Yoshi",                      1.06f, 1.38f, 0.35f, 1.05f},
+        {0x1F00, 0x1F000000000A0002ULL, "06",  "Kirby",                      0.78f, 1.10f, 0.15f, 1.05f},
+        {0x0580, 0x0580000000050002ULL, "07",  "Fox",                        0.77f, 1.35f, 0.30f, 1.00f},
+        {0x1919, 0x1919000000090002ULL, "08",  "Pikachu",                    0.79f, 1.30f, 0.45f, 1.15f},
+        {0x0001, 0x00010000000C0002ULL, "09",  "Luigi",                      0.98f, 0.85f, 0.30f, 1.45f},
+        {0x2280, 0x22800000002C0002ULL, "10",  "Ness",                       0.94f, 1.15f, 0.60f, 1.30f},
+        {0x0600, 0x0600000000120002ULL, "11",  "Captain Falcon",             1.06f, 1.25f, 0.00f, 1.20f},
+        {0x1927, 0x1927000000260002ULL, "12",  "Jigglypuff",                 0.68f, 1.45f, 0.00f, 0.90f},
+        {0x0002, 0x0002000000010002ULL, "13",  "Peach",                      0.90f, 1.25f, 0.40f, 1.10f},
+        {0x0013, 0x0013000002660102ULL, "13E", "Daisy",                      0.90f, 1.25f, 0.40f, 1.10f},
+        {0x0005, 0x0005000000140002ULL, "14",  "Bowser",                     1.40f, 0.95f, 0.25f, 1.35f},
+        {0x078F, 0x078F000003810002ULL, "15",  "Ice Climbers",               0.92f, 0.95f, 0.35f, 1.25f},
+        {0x0112, 0x0101010000170002ULL, "16",  "Sheik",                      0.78f, 1.35f, 0.40f, 1.20f},
+        {0x0101, 0x01010000000E0002ULL, "17",  "Zelda",                      0.86f, 0.90f, 0.70f, 1.05f},
+        {0x000E, 0x0000010000190002ULL, "18",  "Dr. Mario",                  1.00f, 0.90f, 0.40f, 1.15f},
+        {0x19AC, 0x19AC000003850002ULL, "19",  "Pichu",                      0.65f, 1.32f, 0.45f, 1.15f},
+        {0x0581, 0x05810000001C0002ULL, "20",  "Falco",                      0.82f, 1.25f, 0.40f, 1.15f},
+        {0x2100, 0x21000000000B0002ULL, "21",  "Marth",                      0.90f, 1.15f, 0.05f, 1.05f},
+        {0x2102, 0x2102000000290002ULL, "21E", "Lucina",                     0.90f, 1.15f, 0.05f, 1.05f},
+        {0x0104, 0x01000000037C0002ULL, "22",  "Young Link",                 0.88f, 1.10f, 0.85f, 1.05f},
+        {0x0102, 0x01020100001B0002ULL, "23",  "Ganondorf",                  1.25f, 0.75f, 0.00f, 1.15f},
+        {0x1996, 0x19960000023D0002ULL, "24",  "Mewtwo",                     0.79f, 1.25f, 0.55f, 1.20f},
+        {0x2104, 0x2104000002520002ULL, "25",  "Roy",                        0.96f, 1.25f, 0.05f, 1.15f},
+        {0x2108, 0x21080000036F1202ULL, "25E", "Chrom",                      0.96f, 1.25f, 0.05f, 1.10f},
+        {0x0780, 0x07800000002D0002ULL, "26",  "Mr. Game & Watch",           0.75f, 1.28f, 0.45f, 1.20f},
+        {0x1F01, 0x1F01000000270002ULL, "27",  "Meta Knight",                0.80f, 1.25f, 0.05f, 1.00f},
+        {0x0740, 0x0740000000100002ULL, "28",  "Pit",                        0.96f, 1.15f, 0.55f, 1.15f},
+        {0x0741, 0x0741000000200002ULL, "28E", "Dark Pit",                   0.96f, 1.15f, 0.55f, 1.15f},
+        {0x05C1, 0x05C00100001D0002ULL, "29",  "Zero Suit Samus",            0.80f, 1.35f, 0.35f, 1.10f},
+        {0x0007, 0x00070000001A0002ULL, "30",  "Wario",                      1.08f, 1.30f, 0.20f, 1.15f},
+        {0x3780, 0x37800000038A0002ULL, "31",  "Snake",                      1.08f, 0.90f, 0.85f, 1.25f},
+        {0x2101, 0x2101000000180002ULL, "32",  "Ike",                        1.12f, 1.05f, 0.10f, 1.15f},
+        {0x1D40, 0x1D40000003870002ULL, "33",  "Pokemon Trainer",            0.96f, 1.15f, 0.40f, 1.25f},
+        {0x1907, 0x1907000003840002ULL, "33S", "Pokemon Trainer (Squirtle)", 0.85f, 1.20f, 0.35f, 1.25f},
+        {0x1902, 0x1902000003830002ULL, "34",  "Ivysaur",                    0.96f, 1.05f, 0.55f, 1.20f},
+        {0x1906, 0x1906000000240002ULL, "35",  "Charizard",                  1.20f, 1.00f, 0.30f, 1.30f},
+        {0x0009, 0x00090000000D0002ULL, "36",  "Diddy Kong",                 0.92f, 1.15f, 0.55f, 1.25f},
+        {0x2281, 0x2281000002510002ULL, "37",  "Lucas",                      0.94f, 1.15f, 0.65f, 1.25f},
+        {0x3200, 0x3200000000300002ULL, "38",  "Sonic",                      0.86f, 1.35f, 0.20f, 1.05f},
+        {0x1F02, 0x1F02000000280002ULL, "39",  "King Dedede",                1.35f, 0.80f, 0.45f, 1.15f},
+        {0x0640, 0x06400100001E0002ULL, "40",  "Olimar",                     0.79f, 1.05f, 0.75f, 1.30f},
+        {0x1AC0, 0x1AC0000000110002ULL, "41",  "Lucario",                    0.94f, 1.15f, 0.50f, 1.10f},
+        {0x0781, 0x0781000000330002ULL, "42",  "R.O.B.",                     1.08f, 1.15f, 0.75f, 1.25f},
+        {0x0105, 0x0100010000160002ULL, "43",  "Toon Link",                  0.91f, 1.15f, 0.80f, 1.10f},
+        {0x0584, 0x05840000037E0002ULL, "44",  "Wolf",                       0.94f, 1.20f, 0.50f, 1.15f},
+        {0x0180, 0x0180000000080002ULL, "45",  "Villager",                   0.92f, 1.10f, 0.85f, 1.10f},
+        {0x3480, 0x3480000000310002ULL, "46",  "Mega Man",                   1.04f, 1.00f, 0.90f, 1.05f},
+        {0x0700, 0x0700000000070002ULL, "47",  "Wii Fit Trainer",            0.96f, 1.10f, 0.65f, 1.10f},
+        {0x0004, 0x0004010000130002ULL, "48",  "Rosalina & Luma",            0.82f, 1.15f, 0.50f, 1.10f},
+        {0x06C0, 0x06C00000000F0002ULL, "49",  "Little Mac",                 0.88f, 0.70f, 0.00f, 1.00f},
+        {0x1B92, 0x1B92000000250002ULL, "50",  "Greninja",                   0.88f, 1.30f, 0.40f, 1.10f},
+        {0x07C0, 0x07C0000000210002ULL, "51",  "Mii Brawler",                0.96f, 1.20f, 0.25f, 1.20f},
+        {0x07C1, 0x07C0010000220002ULL, "52",  "Mii Swordfighter",           1.00f, 1.10f, 0.55f, 1.10f},
+        {0x07C2, 0x07C0020000230002ULL, "53",  "Mii Gunner",                 1.04f, 0.95f, 0.90f, 1.10f},
+        {0x0742, 0x07420000001F0002ULL, "54",  "Palutena",                   0.91f, 1.25f, 0.55f, 1.25f},
+        {0x3340, 0x3340000000320002ULL, "55",  "Pac-Man",                    0.95f, 1.15f, 0.80f, 1.15f},
+        {0x2103, 0x21030000002A0002ULL, "56",  "Robin",                      0.95f, 1.00f, 0.75f, 1.10f},
+        {0x2240, 0x22400000002B0002ULL, "57",  "Shulk",                      0.98f, 1.20f, 0.05f, 1.10f},
+        {0x0006, 0x0006000000150002ULL, "58",  "Bowser Jr.",                 1.10f, 1.10f, 0.65f, 1.15f},
+        {0x0782, 0x07820000002F0002ULL, "59",  "Duck Hunt",                  0.86f, 1.10f, 0.85f, 1.05f},
+        {0x34C0, 0x34C0000002530002ULL, "60",  "Ryu",                        1.05f, 0.95f, 0.45f, 1.15f},
+        {0x34C1, 0x34C1000003890002ULL, "60E", "Ken",                        1.05f, 1.00f, 0.35f, 1.15f},
+        {0x3600, 0x3600000002590002ULL, "61",  "Cloud",                      1.02f, 1.20f, 0.35f, 1.00f},
+        {0x2105, 0x21050000025A0002ULL, "62",  "Corrin",                     0.98f, 1.10f, 0.35f, 1.10f},
+        {0x3240, 0x32400000025B0002ULL, "63",  "Bayonetta",                  0.81f, 1.25f, 0.30f, 1.00f},
+        {0x0800, 0x0800010003820002ULL, "64",  "Inkling",                    0.94f, 1.25f, 0.50f, 1.20f},
+        {0x05C2, 0x05C20000037F0002ULL, "65",  "Ridley",                     1.09f, 1.10f, 0.35f, 1.20f},
+        {0x37C0, 0x37C00000038B0002ULL, "66",  "Simon",                      1.08f, 0.90f, 0.85f, 1.10f},
+        {0x37C1, 0x37C10000038C0002ULL, "66E", "Richter",                    1.08f, 0.90f, 0.85f, 1.10f},
+        {0x00C0, 0x00C00000037B0002ULL, "67",  "King K. Rool",               1.38f, 0.85f, 0.65f, 1.25f},
+        {0x0181, 0x01810000037D0002ULL, "68",  "Isabelle",                   0.88f, 1.10f, 0.70f, 1.15f},
+        {0x1BD7, 0x1BD7000003860002ULL, "69",  "Incineroar",                 1.22f, 0.80f, 0.10f, 1.45f},
+        {0x0024, 0x00240000038D0002ULL, "70",  "Piranha Plant",              1.15f, 0.95f, 0.60f, 1.15f},
+        {0x3A00, 0x3A00000003A10002ULL, "71",  "Joker",                      0.93f, 1.25f, 0.45f, 1.15f},
+        {0x3640, 0x3640000003A20002ULL, "72",  "Hero",                       1.01f, 1.00f, 0.75f, 1.10f},
+        {0x3B40, 0x3B40000003A30002ULL, "73",  "Banjo & Kazooie",            1.06f, 1.05f, 0.65f, 1.15f},
+        {0x3C80, 0x3C80000003A40002ULL, "74",  "Terry",                      1.08f, 1.05f, 0.35f, 1.15f},
+        {0x210B, 0x210B000003A50002ULL, "75",  "Byleth",                     0.98f, 0.95f, 0.40f, 1.15f},
+        {0x0A40, 0x0A400000041D0002ULL, "76",  "Min Min",                    1.04f, 0.95f, 0.75f, 1.20f},
+        {0x3DC0, 0x3DC0000004220002ULL, "77",  "Steve",                      0.92f, 1.10f, 0.65f, 1.20f},
+        {0x3DC1, 0x3DC1000004230002ULL, "77E", "Alex",                       0.92f, 1.10f, 0.65f, 1.20f},
+        {0x3601, 0x3601000004210002ULL, "78",  "Sephiroth",                  0.79f, 1.15f, 0.55f, 1.10f},
+        {0x2241, 0x22410000041E0002ULL, "79",  "Pyra",                       0.98f, 1.15f, 0.35f, 1.15f},
+        {0x2242, 0x22420000041F0002ULL, "80",  "Mythra",                     0.92f, 1.38f, 0.25f, 1.15f},
+        {0x33C0, 0x33C0000004200002ULL, "81",  "Kazuya",                     1.15f, 0.90f, 0.30f, 1.40f},
+        {0x3F00, 0x3F000000042E0002ULL, "82",  "Sora",                       0.85f, 1.35f, 0.45f, 1.05f}
     };
     return kFighters;
+}
+
+// Complete 162-entry official SSBU Amiibo 64-bit ID table from jozz024/smash-amiibo-editor/resources/characters.json
+struct VariantAmiiboMap {
+    uint64_t amiibo_id;
+    uint16_t fighter_char_id;
+};
+
+static const VariantAmiiboMap kCanonicalSsbuAmiiboVariants[] = {
+    {2ULL,                    0x0000}, // Mario
+    {3408130ULL,              0x0000}, // Mario: Super Mario
+    {3932418ULL,              0x0000}, // Mario - Gold Edition
+    {3997954ULL,              0x0000}, // Mario - Silver Edition
+    {37225986ULL,             0x0000}, // 8-Bit Mario Classic Color
+    {37291522ULL,             0x0000}, // 8-Bit Mario Modern Color
+    {57737474ULL,             0x0000}, // Mario - Wedding
+    {12945456898ULL,          0x0000}, // Mario - Power Up Band
+    {1099513266178ULL,        0x000E}, // Dr. Mario
+    {3298596094210ULL,        0x0000}, // Mario - Cat
+    {281474977497090ULL,      0x0001}, // Luigi
+    {281474980184322ULL,      0x0001}, // Luigi: Super Mario
+    {281487922233090ULL,      0x0001}, // Luigi - Power Up Band
+    {562949953486850ULL,      0x0002}, // Peach
+    {562949956960514ULL,      0x0002}, // Peach: Super Mario
+    {562950011224322ULL,      0x0002}, // Peach - Wedding
+    {562962899009282ULL,      0x0002}, // Peach - Power Up Band
+    {564049526325506ULL,      0x0002}, // Peach - Cat
+    {844424930263042ULL,      0x0003}, // Yoshi
+    {844424933736706ULL,      0x0003}, // Yoshi: Super Mario
+    {844437875851010ULL,      0x0003}, // Yoshi - Power Up Band
+    {845533035954946ULL,      0x0003}, // Green Yarn Yoshi
+    {845533036020482ULL,      0x0003}, // Pink Yarn Yoshi
+    {845533036086018ULL,      0x0003}, // Light Blue Yarn Yoshi
+    {845533069312770ULL,      0x0003}, // Mega Yarn Yoshi
+    {1125899946819842ULL,     0x0004}, // Rosalina
+    {1126999419715586ULL,     0x0004}, // Rosalina & Luma
+    {1407374884864002ULL,     0x0005}, // Bowser
+    {1407374887289090ULL,     0x0005}, // Bowser: Super Mario
+    {1407374941421826ULL,     0x0005}, // Bowser - Wedding
+    {1687750385993474ULL,     0x0005}, // Hammer Slam Bowser
+    {1688849861640194ULL,     0x0006}, // Bowser Jr.
+    {1970324838678530ULL,     0x0007}, // Wario
+    {1970324877017346ULL,     0x0007}, // Wario: Super Mario
+    {2251799813881858ULL,     0x0008}, // Donkey Kong
+    {2251799853793538ULL,     0x0008}, // Donkey Kong: Super Mario
+    {2532175316190978ULL,     0x0008}, // Turbo Charge Donkey Kong
+    {2533274791247874ULL,     0x0009}, // Diddy Kong
+    {2533274830569730ULL,     0x0009}, // Diddy Kong: Super Mario
+    {5348024597741826ULL,     0x0013}, // Daisy
+    {5348024615829506ULL,     0x0013}, // Daisy: Super Mario
+    {5348037503155970ULL,     0x0013}, // Daisy - Power Up Band
+    {10133099221155842ULL,    0x0024}, // Piranha Plant
+    {54043195586838530ULL,    0x00C0}, // King K. Rool
+    {72057594038190082ULL,    0x0100}, // Link
+    {72057594093177090ULL,    0x0100}, // Link - Ocarina of Time
+    {72057594093242626ULL,    0x0100}, // Link - Majora's Mask
+    {72057594093308162ULL,    0x0100}, // Link - Twilight Princess
+    {72057594093373698ULL,    0x0100}, // Link - Skyward Sword
+    {72057594093439234ULL,    0x0100}, // 8-Bit Link
+    {72057594093701378ULL,    0x0100}, // Link - Archer
+    {72057594093766914ULL,    0x0100}, // Link - Rider
+    {72057594096386050ULL,    0x0104}, // Young Link
+    {72057594098288898ULL,    0x0104}, // Link - Link's Awakening
+    {72058693550997506ULL,    0x0105}, // Toon Link
+    {72058693605132546ULL,    0x0105}, // Toon Link - The Wind Waker
+    {72339069015556098ULL,    0x0101}, // Zelda
+    {72339069070346498ULL,    0x0101}, // Toon Zelda - The Wind Waker
+    {72339069070608642ULL,    0x0101}, // Zelda: The Legend of Zelda
+    {72340168527773698ULL,    0x0112}, // Sheik
+    {72342367617943810ULL,    0x0101}, // Zelda & Loftwing
+    {72621643504746498ULL,    0x0102}, // Ganondorf
+    {108086391057416194ULL,   0x0180}, // Villager
+    {108367866072073474ULL,   0x0181}, // Isabelle - Summer Outfit
+    {108367866092126210ULL,   0x0181}, // Isabelle
+    {108372268436555010ULL,   0x0181}, // Isabelle: Animal Crossing
+    {108367870359241986ULL,   0x0181}, // Isabelle - Character Parfait
+    {108368965582914818ULL,   0x0181}, // Isabelle - Winter Outfit
+    {108368969851995394ULL,   0x0181}, // Isabelle - Winter
+    {108370069370307842ULL,   0x0181}, // Isabelle - Kimono
+    {108371168887571714ULL,   0x0181}, // Isabelle - Dress
+    {108373367949559042ULL,   0x0181}, // Isabelle - Sweater
+    {396316767208931330ULL,   0x0580}, // Fox
+    {396598242187149314ULL,   0x0581}, // Falco
+    {397442667174035458ULL,   0x0584}, // Wolf
+    {414331165718478850ULL,   0x05C0}, // Samus
+    {414331165775041282ULL,   0x05C0}, // Samus Aran
+    {414331165786379010ULL,   0x05C0}, // Samus - Metroid Dread
+    {414332265231613954ULL,   0x05C1}, // Zero Suit Samus
+    {414894115730161666ULL,   0x05C2}, // Ridley
+    {415175590706937858ULL,   0x05C3}, // Dark Samus
+    {432345564228747266ULL,   0x0600}, // Captain Falcon
+    {450361062250643458ULL,   0x0640}, // Olimar
+    {486388759756996610ULL,   0x06C0}, // Little Mac
+    {504403158265954306ULL,   0x0700}, // Wii Fit Trainer
+    {522417556776026114ULL,   0x0740}, // Pit
+    {522699031753785346ULL,   0x0741}, // Dark Pit
+    {522980506730430466ULL,   0x0742}, // Palutena
+    {540431955287408642ULL,   0x0780}, // Mr. Game & Watch
+    {540713430264184834ULL,   0x0781}, // R.O.B. - Famicom
+    {540713430264512514ULL,   0x0781}, // R.O.B. - NES
+    {540994905240961026ULL,   0x0782}, // Duck Hunt
+    {544654079993905154ULL,   0x078F}, // Ice Climbers
+    {558446353796104194ULL,   0x07C0}, // Mii Brawler
+    {558447453307797506ULL,   0x07C1}, // Mii Swordfighter
+    {558448552819490818ULL,   0x07C2}, // Mii Gunner
+    {576461851819115522ULL,   0x0800}, // Inkling Girl
+    {576461851854832642ULL,   0x0800}, // Inkling Girl - Lime Green
+    {576461851872265218ULL,   0x0800}, // Inkling Girl - Neon Pink
+    {576461851873902594ULL,   0x0800}, // Inkling
+    {576462951330808834ULL,   0x0800}, // Inkling Boy
+    {576462951366525954ULL,   0x0800}, // Inkling Boy - Purple
+    {576462951383958530ULL,   0x0800}, // Inkling Boy - Neon Green
+    {576464050842502146ULL,   0x0800}, // Inkling Squid
+    {576464050878219266ULL,   0x0800}, // Inkling Squid - Orange
+    {576464050895651842ULL,   0x0800}, // Inkling Squid - Neon Purple
+    {1802002800960536578ULL,  0x1902}, // Ivysaur
+    {1803128700810821634ULL,  0x1906}, // Charizard
+    {1803410175844155394ULL,  0x1907}, // Squirtle
+    {1808476725366554626ULL,  0x1919}, // Pikachu
+    {1812417375042404354ULL,  0x1927}, // Jigglypuff
+    {1843661097492348930ULL,  0x1996}, // Mewtwo
+    {1849853547001479170ULL,  0x19AC}, // Pichu
+    {1927540640515686402ULL,  0x1AC0}, // Lucario
+    {1986650385626234882ULL,  0x1B92}, // Greninja
+    {2006072159075958786ULL,  0x1BD7}, // Incineroar
+    {2107684625668571138ULL,  0x1D40}, // Pokemon Trainer
+    {2233785415176421378ULL,  0x1F00}, // Kirby
+    {2233785415214828546ULL,  0x1F00}, // Kirby: Kirby
+    {2234066890155032578ULL,  0x1F01}, // Meta Knight
+    {2234066890191604738ULL,  0x1F01}, // Meta Knight: Kirby
+    {2234348365131808770ULL,  0x1F02}, // King Dedede
+    {2234348365168380930ULL,  0x1F02}, // King Dedede: Kirby
+    {2377900603252342786ULL,  0x2100}, // Marth
+    {2378182078229905410ULL,  0x2101}, // Ike
+    {2378463553207730178ULL,  0x2102}, // Lucina
+    {2378745028184506370ULL,  0x2103}, // Robin
+    {2379026503197392898ULL,  0x2104}, // Roy
+    {2379307978174627842ULL,  0x2105}, // Corrin
+    {2379309077703622658ULL,  0x2105}, // Corrin - Player 2
+    {2380152403122917890ULL,  0x2108}, // Chrom
+    {2380152403124551682ULL,  0x2108}, // Chrom: Fire Emblem
+    {2380996828056584194ULL,  0x210B}, // Byleth
+    {2467972595801849858ULL,  0x2240}, // Shulk
+    {2485986994311397378ULL,  0x2280}, // Ness
+    {2486268469324087298ULL,  0x2281}, // Lucas
+    {3602879701899542530ULL,  0x3200}, // Sonic
+    {3620894100445396994ULL,  0x3240}, // Bayonetta
+    {3620895199974391810ULL,  0x3240}, // Bayonetta - Player 2
+    {3692951694447083522ULL,  0x3340}, // Pac-Man
+    {3783023686994427906ULL,  0x3480}, // Mega Man
+    {3783023687030538242ULL,  0x3480}, // Mega Man - Gold Edition
+    {3783023687049483522ULL,  0x3480}, // Mega Man: Megaman
+    {3801038085539692546ULL,  0x34C0}, // Ryu
+    {3801319560536719362ULL,  0x34C1}, // Ken
+    {3891110078087495682ULL,  0x3600}, // Cloud
+    {3891111177616490498ULL,  0x3600}, // Cloud - Player 2
+    {3909124476618539010ULL,  0x3640}, // Hero
+    {3999196469164376066ULL,  0x3780}, // Snake
+    {4017210867673923586ULL,  0x37C0}, // Simon
+    {4017492342650699778ULL,  0x37C1}, // Richter
+    {4179340454260703234ULL,  0x3A00}, // Joker
+    {4269412446808244226ULL,  0x3B40}, // Banjo & Kazooie
+    {4359484439355719682ULL,  0x3C80}, // Terry
+    {738590338957770754ULL,   0x0A40}, // Min Min
+    {4449556431911387138ULL,  0x3DC0}, // Steve
+    {4449837906888163330ULL,  0x3DC1}, // Alex
+    {3728980491531976706ULL,  0x33C0}, // Kazuya
+    {3891391553094090754ULL,  0x3601}, // Sephiroth
+    {2468254070844817410ULL,  0x2241}, // Pyra
+    {2468535545821593602ULL,  0x2242}, // Mythra
+    {4539628424459583490ULL,  0x3F00}  // Sora
+};
+
+bool IsCanonicalSsbuAmiiboId(uint64_t amiibo_id) {
+    for (const auto& entry : kCanonicalSsbuAmiiboVariants) {
+        if (entry.amiibo_id == amiibo_id) return true;
+    }
+    return false;
+}
+
+const FighterInfo* FindFighterByAmiiboId(uint64_t amiibo_id) {
+    const auto& cat = GetFighterCatalog();
+    // 1. Exact 64-bit match against primary catalog
+    for (const auto& f : cat) {
+        if (f.amiibo_id == amiibo_id) return &f;
+    }
+    // 2. Exact 64-bit match against all 162 official SSBU variant IDs in characters.json
+    for (const auto& v : kCanonicalSsbuAmiiboVariants) {
+        if (v.amiibo_id == amiibo_id) {
+            return FindFighterById(v.fighter_char_id);
+        }
+    }
+    // 3. Match by 16-bit Amiibo Model Number (bits 16..31)
+    uint16_t model_no = static_cast<uint16_t>((amiibo_id >> 16) & 0xFFFFu);
+    if (model_no != 0) {
+        for (const auto& f : cat) {
+            if (static_cast<uint16_t>((f.amiibo_id >> 16) & 0xFFFFu) == model_no) {
+                return &f;
+            }
+        }
+    }
+    // 4. Fallback to top 16 bits (Game/Character ID at 0x1DC..0x1DD)
+    uint16_t top16 = static_cast<uint16_t>((amiibo_id >> 48) & 0xFFFFu);
+    return FindFighterById(top16);
 }
 
 const FighterInfo* FindFighterById(uint16_t char_id) {
     const auto& cat = GetFighterCatalog();
     for (const auto& f : cat) {
         if (f.char_id == char_id) return &f;
+    }
+    // Support legacy v2.1-v2.4 non-colliding fighter IDs so older files/CLI flags map cleanly
+    switch (char_id) {
+        case 0x0500: return FindFighterById(0x05C0); // Samus
+        case 0x0501: return FindFighterById(0x05C3); // Dark Samus
+        case 0x0502: return FindFighterById(0x05C1); // Zero Suit Samus
+        case 0x0503: return FindFighterById(0x05C2); // Ridley
+        case 0x2300: return FindFighterById(0x078F); // Ice Climbers
+        case 0x0103: return FindFighterById(0x0102); // Ganondorf
+        case 0x199A: return FindFighterById(0x1996); // Mewtwo
+        case 0x0641: return FindFighterById(0x0741); // Dark Pit
+        case 0x0642: return FindFighterById(0x0742); // Palutena
+        case 0x0680: return FindFighterById(0x0640); // Olimar
+        case 0x1A04: return FindFighterById(0x1AC0); // Lucario
+        case 0x0582: return FindFighterById(0x0584); // Wolf
+        case 0x0701: return FindFighterById(0x07C1); // Mii Swordfighter
+        case 0x0702: return FindFighterById(0x07C2); // Mii Gunner
+        case 0x2107: return FindFighterById(0x2105); // Corrin
+        case 0x3680: return FindFighterById(0x3240); // Bayonetta
+        case 0x3700: return FindFighterById(0x37C0); // Simon
+        case 0x3701: return FindFighterById(0x37C1); // Richter
+        case 0x1C13: return FindFighterById(0x1BD7); // Incineroar
+        case 0x0015: return FindFighterById(0x0024); // Piranha Plant
+        case 0x3740: return FindFighterById(0x3A00); // Joker
+        case 0x3800: return FindFighterById(0x3C80); // Terry
+        case 0x2106: return FindFighterById(0x210B); // Byleth
+        case 0x3840: return FindFighterById(0x0A40); // Min Min
+        case 0x38C0: return FindFighterById(0x3DC0); // Steve
+        case 0x3900: return FindFighterById(0x33C0); // Kazuya
+        case 0x3940: return FindFighterById(0x3F00); // Sora
+        default: break;
     }
     return &cat[0];
 }

@@ -44,7 +44,7 @@ void TestSpiritCatalogAndRoster() {
     assert(primaries.size() >= 60);
 
     const auto& roster = ssbu::GetFighterCatalog();
-    assert(roster.size() >= 89);
+    assert(roster.size() >= 91);
     assert(ssbu::FindFighterByName("Mario") != nullptr);
     assert(ssbu::FindFighterByName("Sora") != nullptr);
     assert(ssbu::FindFighterByName("Kazuya") != nullptr);
@@ -52,9 +52,20 @@ void TestSpiritCatalogAndRoster() {
     assert(ssbu::FindFighterByName("Pyra") != nullptr);
     assert(ssbu::FindFighterByName("Mythra") != nullptr);
 
+    // Verify EVERY single fighter in the 91-fighter catalog has a canonical 64-bit SSBU Amiibo ID
+    // from jozz024/smash-amiibo-editor/resources/characters.json and round-trips cleanly
+    ssbu::AmiiboBin bin;
+    for (const auto& f : roster) {
+        assert(ssbu::IsCanonicalSsbuAmiiboId(f.amiibo_id));
+        bin.SetCharacterId(f.char_id);
+        assert(bin.GetCharacterId() == f.char_id);
+        assert(bin.GetAmiiboId() == f.amiibo_id);
+        assert(bin.VerifySwitchCompatibility());
+    }
+
     std::cout << "[PASS] TestSpiritCatalogAndRoster (255 raw / " << selectable.size()
               << " selectable Support Spirits, " << primaries.size()
-              << " Primary Spirits, " << roster.size() << " Fighters)\n";
+              << " Primary Spirits, " << roster.size() << " Canonical 64-bit SSBU Fighters)\n";
 }
 
 void TestSwitchNfpCompatibilityAndAutoMii() {
@@ -62,7 +73,8 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     ssbu::AmiiboBin bin;
     assert(bin.HasRetailKey());
     assert(bin.VerifyRetailKeyHash());
-    bin.InitializeBlankFighter(0x3601, 0); // Sephiroth
+    bin.InitializeBlankFighter(0x3601, 0); // Sephiroth (0x3601000004210002)
+    assert(bin.GetAmiiboId() == 0x3601000004210002ULL);
     assert(bin.HasOwnerMii());
     assert(bin.VerifyOwnerMiiCrc16());
     assert(bin.VerifyOwnerMiiBitfields());
@@ -70,7 +82,7 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     assert(bin.GetOwnerMiiName() == "SwitchMii");
     assert(bin.GetAmiiboNickname() == "Sephiroth");
 
-    // 2. Verify full Nintendo Switch nn::nfp & NTAG215 hardware/crypto compatibility
+    // 2. Verify full Nintendo Switch nn::nfp & SSBU AppData compatibility
     std::string diag;
     assert(bin.VerifySwitchCompatibility(&diag));
 
@@ -78,8 +90,9 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     bin.SetOwnerMiiName("Shimon");
     bin.SetAmiiboNickname("OneWing");
     uint16_t mii_crc_before = bin.GetOwnerMiiCrc16();
-    bin.SetCharacterId(0x3900); // Switch to Kazuya
-    assert(bin.GetCharacterId() == 0x3900);
+    bin.SetCharacterId(0x33C0); // Switch to Kazuya (0x33C0000004200002)
+    assert(bin.GetCharacterId() == 0x33C0);
+    assert(bin.GetAmiiboId() == 0x33C0000004200002ULL);
     assert(bin.HasOwnerMii());
     assert(bin.VerifyOwnerMiiCrc16());
     assert(bin.VerifyOwnerMiiBitfields());
@@ -92,7 +105,7 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     std::string err;
     assert(bin.SaveToFile(out_file, &err));
 
-    // Inspect raw disk bytes to verify Tag Layout (UID at 0x000, BCC0 at 0x003, BCC1 at 0x008, CC at 0x00C..0x00F, 0xA5 at 0x010, FigID 0x02 at 0x05B, PWD/PACK at 0x214..0x219)
+    // Inspect raw disk bytes to verify Tag Layout (UID at 0x000, BCC0 at 0x003, BCC1 at 0x008, CC at 0x00C..0x00F, 0xA5 at 0x010, FigID 33C0000004200002 at 0x054..0x05B, PWD/PACK at 0x214..0x219)
     std::ifstream raw_in(out_file, std::ios::binary);
     std::vector<uint8_t> disk_tag(540, 0);
     raw_in.read(reinterpret_cast<char*>(disk_tag.data()), 540);
@@ -102,8 +115,11 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     assert(disk_tag[0x008] == (disk_tag[0x004] ^ disk_tag[0x005] ^ disk_tag[0x006] ^ disk_tag[0x007]));
     assert(disk_tag[0x00C] == 0xF1 && disk_tag[0x00D] == 0x10 && disk_tag[0x00E] == 0xFF && disk_tag[0x00F] == 0xEE);
     assert(disk_tag[0x010] == 0xA5);
-    assert(disk_tag[0x054] == 0x39 && disk_tag[0x055] == 0x00); // Kazuya in Tag Layout
-    assert(disk_tag[0x05B] == 0x02); // Mandatory Amiibo Figure ID constant
+    // Verify canonical 8-byte Figure ID for Kazuya (33 C0 00 00 04 20 00 02) at tag[0x054..0x05B]
+    assert(disk_tag[0x054] == 0x33 && disk_tag[0x055] == 0xC0 &&
+           disk_tag[0x056] == 0x00 && disk_tag[0x057] == 0x00 &&
+           disk_tag[0x058] == 0x04 && disk_tag[0x059] == 0x20 &&
+           disk_tag[0x05A] == 0x00 && disk_tag[0x05B] == 0x02);
     // Verify NTAG215 Page 133 PWD & Page 134 PACK (0x8080)
     assert(disk_tag[0x214] == (disk_tag[0x001] ^ disk_tag[0x004] ^ 0xAAu));
     assert(disk_tag[0x215] == (disk_tag[0x002] ^ disk_tag[0x005] ^ 0x55u));
@@ -119,7 +135,8 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     ssbu::AmiiboBin reloaded;
     assert(reloaded.LoadFromFile(out_file, &err));
     assert(reloaded.WasLoadedEncrypted());
-    assert(reloaded.GetCharacterId() == 0x3900);
+    assert(reloaded.GetCharacterId() == 0x33C0);
+    assert(reloaded.GetAmiiboId() == 0x33C0000004200002ULL);
     assert(reloaded.HasOwnerMii());
     assert(reloaded.GetOwnerMiiName() == "Shimon");
     assert(reloaded.GetAmiiboNickname() == "OneWing");
@@ -133,6 +150,7 @@ void TestBitfieldPackingAndStats() {
     ssbu::AmiiboBin bin;
     bin.InitializeBlankFighter(0x0580, 3); // Fox, Skin 3
     assert(bin.GetCharacterId() == 0x0580);
+    assert(bin.GetAmiiboId() == 0x0580000000050002ULL);
     assert(bin.GetAlternateSkin() == 3);
 
     bin.SetLearningEnabled(false);
@@ -187,6 +205,7 @@ void TestBitfieldPackingAndStats() {
 void TestNtag215TagConversionAndCryptoRoundTrip() {
     const auto* sephiroth = ssbu::FindFighterByName("Sephiroth");
     assert(sephiroth != nullptr);
+    assert(sephiroth->amiibo_id == 0x3601000004210002ULL);
 
     ssbu::AmiiboBin bin;
     bin.InitializeBlankFighter(sephiroth->char_id, 2);
@@ -211,6 +230,7 @@ void TestNtag215TagConversionAndCryptoRoundTrip() {
     assert(reloaded.VerifyNtag215PwdPack());
     assert(reloaded.VerifySwitchCompatibility());
     assert(reloaded.GetCharacterId() == sephiroth->char_id);
+    assert(reloaded.GetAmiiboId() == 0x3601000004210002ULL);
     assert(reloaded.GetAttackStat() == 2900);
     assert(reloaded.GetDefenseStat() == 2100);
     assert(reloaded.GetDisplayedLevel() == 50);
@@ -218,7 +238,7 @@ void TestNtag215TagConversionAndCryptoRoundTrip() {
     assert(slots[0] == 162 && slots[1] == 81);
     std::remove(enc_file.c_str());
 
-    std::cout << "[PASS] TestNtag215TagConversionAndCryptoRoundTrip (Canonical Retail Key MD5 45fd53569f5765eef9c337bd5172f937)\n";
+    std::cout << "[PASS] TestNtag215TagConversionAndCryptoRoundTrip (Sephiroth 0x3601000004210002 + SSBU Little-Endian CRC-32)\n";
 }
 
 void TestPersonalityScoringBranches() {
@@ -321,7 +341,7 @@ void TestTrainingSimulation500Games60Fps() {
     assert(trained_bp.attack_out_cliff > 0.55f);
     assert(trained_bp.meteor_master > 0.55f);
 
-    const std::string tmp_file = "test_trained_amiibo_v24.bin";
+    const std::string tmp_file = "test_trained_amiibo_v25.bin";
     std::string err;
     bool saved = bin.SaveToFile(tmp_file, &err);
     assert(saved);
@@ -349,7 +369,7 @@ void TestTrainingSimulation500Games60Fps() {
 } // namespace
 
 int main() {
-    std::cout << "Running SSBU Amiibo Trainer v2.4 (Switch nn::nfp Verified + 60 FPS GPU Physics) C++20 Unit & Integration Tests...\n";
+    std::cout << "Running SSBU Amiibo Trainer v2.5 (Switch nn::nfp + SSBU AppData Checksum Verified + 60 FPS GPU Physics) C++20 Unit & Integration Tests...\n";
     TestSpiritCatalogAndRoster();
     TestSwitchNfpCompatibilityAndAutoMii();
     TestBitfieldPackingAndStats();
@@ -357,6 +377,6 @@ int main() {
     TestPersonalityScoringBranches();
     TestGpuFirstComputeEngine();
     TestTrainingSimulation500Games60Fps();
-    std::cout << "All SSBU Amiibo Trainer v2.4 tests passed!\n";
+    std::cout << "All SSBU Amiibo Trainer v2.5 tests passed!\n";
     return 0;
 }
