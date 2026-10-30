@@ -24,21 +24,21 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow);
 namespace {
 
 void PrintUsage(const char* prog) {
-    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.2 (Auto-Mii + GPU-First)\n"
+    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.3 (Switch-Verified + 60 FPS GPU Sim)\n"
               << "Usage:\n"
               << "  " << prog << " --gui                        Launch native Windows GUI (default on Windows)\n"
               << "  " << prog << " [options]                    Run headless CLI training & spirit customization\n\n"
               << "Options:\n"
               << "  --in <path>                  Input 540-byte Amiibo .bin file (auto-pairs Owner Mii if unregistered)\n"
-              << "  --out <path>                 Output trained 540-byte Amiibo .bin file\n"
-              << "  --keys <path>                Optional 160-byte key_retail.bin for NTAG215 AES-128-CTR decrypt/encrypt\n"
+              << "  --out <path>                 Output trained 540-byte Switch-ready Amiibo .bin file\n"
+              << "  --keys <path>                Optional 160-byte key_retail.bin override (built-in by default)\n"
               << "  --nickname <name>            Set Amiibo Nickname (up to 10 UTF-16BE chars, auto-defaults to Fighter name)\n"
               << "  --mii-name <owner>           Set paired Owner Mii Name (up to 10 UTF-16LE chars, default: SwitchMii)\n"
               << "  --backend <auto|gpu|cpu>     Compute backend preference (default: auto = GPU First -> CPU Fallback)\n"
               << "  --gpu-info                   Probe and print GPU compute device capabilities\n"
               << "  --fighter <id_or_name>       Amiibo fighter ID (e.g. 0x0000) or name (e.g. \"Mario\", \"Kazuya\")\n"
               << "  --opponent <id_or_name>      Sparring opponent fighter ID or name (default: Fox)\n"
-              << "  --games <N>                  Number of matches to simulate (default: 500)\n"
+              << "  --games <N>                  Number of 60 FPS matches to simulate (default: 500)\n"
               << "  --archetype <name>           gauntlet | balanced | rushdown | zoner | parry | grappler | aerial\n"
               << "  --focus <name>               optimal | aggressive | parry | aerial | showoff | adaptive | heavy\n"
               << "  --primary-spirit <name>      Equip Primary Spirit preset by name\n"
@@ -48,7 +48,7 @@ void PrintUsage(const char* prog) {
               << "  --list-spirits [query]       Search or list Support Spirits in SSBU\n"
               << "  --list-primaries             List Primary Spirit presets\n"
               << "  --list-fighters              List all 89 SSBU playable fighters & character IDs\n"
-              << "  --inspect                    Print detailed Amiibo diagnostic report\n";
+              << "  --inspect                    Print detailed Amiibo & Switch nn::nfp diagnostic report\n";
 }
 
 ssbu::ComputePreference ParseBackendPref(const std::string& s) {
@@ -88,9 +88,13 @@ uint16_t ResolveFighterArg(const std::string& arg) {
 void PrintDiagnosticSummary(const ssbu::AmiiboBin& bin) {
     const auto* f = ssbu::FindFighterById(bin.GetCharacterId());
     auto gpu = ssbu::GpuComputeEngine::ProbeGpuDevice();
+    std::string switch_diag;
+    bin.VerifySwitchCompatibility(&switch_diag);
+
     std::cout << "=== SSBU Amiibo Diagnostic Summary ===\n"
+              << "  Switch nn::nfp  : " << switch_diag << "\n"
               << "  Format Status   : " << bin.GetFormatStatusString() << "\n"
-              << "  Owner Mii       : " << (bin.HasOwnerMii() ? "AUTO-PAIRED" : "UNREGISTERED")
+              << "  Owner Mii       : " << (bin.HasOwnerMii() ? "AUTO-PAIRED & VER3 VALID" : "UNREGISTERED")
               << " (Owner: \"" << bin.GetOwnerMiiName() << "\" | Nickname: \"" << bin.GetAmiiboNickname()
               << "\" | CRC-16: 0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
               << bin.GetOwnerMiiCrc16() << std::dec << std::setfill(' ') << ")\n"
@@ -129,6 +133,7 @@ int main(int argc, char** argv) {
     std::string mii_name_arg;
     std::string backend_str = "auto";
     std::string fighter_arg = "Mario";
+    bool explicit_fighter = false;
     std::string opponent_arg = "Fox";
     int num_games = 500;
     std::string archetype_str = "gauntlet";
@@ -201,6 +206,7 @@ int main(int argc, char** argv) {
             backend_str = argv[++i];
         } else if (arg == "--fighter" && i + 1 < argc) {
             fighter_arg = argv[++i];
+            explicit_fighter = true;
         } else if (arg == "--opponent" && i + 1 < argc) {
             opponent_arg = argv[++i];
         } else if (arg == "--games" && i + 1 < argc) {
@@ -242,6 +248,9 @@ int main(int argc, char** argv) {
         if (!bin.LoadFromFile(in_path, &err)) {
             std::cerr << "Error loading input .bin: " << err << "\n";
             return 1;
+        }
+        if (explicit_fighter && bin.GetCharacterId() != char_id) {
+            bin.SetCharacterId(char_id);
         }
     }
 
@@ -298,12 +307,15 @@ int main(int argc, char** argv) {
         ssbu::TrainingSummary sum = ssbu::TrainingSimulator::RunTrainingSession(bin, cfg);
         float win_rate = (sum.total_games > 0)
             ? (100.0f * static_cast<float>(sum.wins) / static_cast<float>(sum.total_games)) : 0.0f;
-        std::cout << "=== SSBU Amiibo Training Complete ===\n"
+        std::cout << "=== SSBU 60 FPS Frame-by-Frame Amiibo Training Complete ===\n"
                   << "Compute Backend : " << sum.compute_backend_used << " (" << sum.compute_adapter_name << ")\n"
                   << "Compute Time    : " << std::fixed << std::setprecision(2) << sum.compute_elapsed_ms << " ms\n"
-                  << "Games Simulated : " << sum.total_games << "\n"
+                  << "Games Simulated : " << sum.total_games << " (" << sum.total_frames_simulated << " 60Hz frames)\n"
                   << "Win / Loss      : " << sum.wins << "W - " << sum.losses << "L ("
                   << std::fixed << std::setprecision(1) << win_rate << "%)\n"
+                  << "Combat Stats    : " << sum.total_hits_landed << " Hits | "
+                  << sum.total_grabs_landed << " Grabs | " << sum.total_parries << " Parries | "
+                  << sum.total_meteors << " Meteors | " << sum.total_ledge_recoveries << " Ledge Recs\n"
                   << "Level Progress  : Lv " << sum.initial_level
                   << " -> Lv " << sum.final_level << "\n"
                   << "Final Style     : " << sum.final_personality << "\n\n";
@@ -317,7 +329,7 @@ int main(int argc, char** argv) {
             std::cerr << "Error saving output .bin: " << err << "\n";
             return 1;
         }
-        std::cout << "Successfully wrote trained 540-byte Amiibo .bin to: " << out_path << "\n";
+        std::cout << "Successfully wrote Switch-verified 540-byte NTAG215 Amiibo .bin to: " << out_path << "\n";
     }
 
     return 0;

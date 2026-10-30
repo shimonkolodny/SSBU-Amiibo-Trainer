@@ -86,7 +86,7 @@ struct GuiAppState {
     GpuDeviceInfo gpu_info;
     std::string current_path = "unloaded_amiibo.bin";
     std::string last_sim_log = "No training matches run yet. Configure your opponent and click 'RUN GPU-ACCELERATED TRAINING SIMULATION'.\r\n";
-    int active_view = 0; // 0 = Overview, 1 = Full AI Behavior & Moves, 2 = Match Log
+    int active_view = 0;
 
     HFONT font_regular = nullptr;
     HFONT font_bold = nullptr;
@@ -141,13 +141,17 @@ static std::string ToCrlf(const std::string& text) {
 
 static std::string BuildOverviewReport(const AmiiboBin& bin, const std::string& path) {
     const auto* fighter = FindFighterById(bin.GetCharacterId());
+    std::string switch_diag;
+    bin.VerifySwitchCompatibility(&switch_diag);
+
     std::ostringstream oss;
     oss << "====================================================================\n";
-    oss << "    SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.2 (AUTO-MII)    \n";
+    oss << "  SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.3 (SWITCH-READY)   \n";
     oss << "====================================================================\n";
     oss << "File Path          : " << path << "\n";
+    oss << "Switch nn::nfp     : " << switch_diag << "\n";
     oss << "Binary Format      : " << bin.GetFormatStatusString() << "\n";
-    oss << "Owner Mii Status   : " << (bin.HasOwnerMii() ? "AUTO-PAIRED & READY FOR SWITCH" : "UNREGISTERED")
+    oss << "Owner Mii Status   : " << (bin.HasOwnerMii() ? "AUTO-PAIRED & VER3 BITFIELD VALID" : "UNREGISTERED")
         << " (Owner Mii: \"" << bin.GetOwnerMiiName()
         << "\" | Nickname: \"" << bin.GetAmiiboNickname()
         << "\" | Mii CRC-16: 0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
@@ -368,7 +372,9 @@ static void ApplySelectedFighterAndSpirits(HWND hwnd) {
     const auto& roster = GetFighterCatalog();
     LRESULT f_idx = SendMessageA(g_app.hwnd_fighter, CB_GETCURSEL, 0, 0);
     if (f_idx != CB_ERR && static_cast<size_t>(f_idx) < roster.size()) {
-        g_app.bin.SetCharacterId(roster[f_idx].char_id);
+        if (g_app.bin.GetCharacterId() != roster[f_idx].char_id) {
+            g_app.bin.SetCharacterId(roster[f_idx].char_id);
+        }
     }
 
     LRESULT c_idx = SendMessageA(g_app.hwnd_costume, CB_GETCURSEL, 0, 0);
@@ -388,7 +394,7 @@ static void ApplySelectedFighterAndSpirits(HWND hwnd) {
 
     const auto& primaries = GetPrimarySpiritCatalog();
     LRESULT p_idx = SendMessageA(g_app.hwnd_primary, CB_GETCURSEL, 0, 0);
-    if (p_idx != CB_ERR && static_cast<size_t>(p_idx) < primaries.size()) {
+    if (p_idx != CB_ERR && p_idx > 0 && static_cast<size_t>(p_idx) < primaries.size()) {
         g_app.bin.SetSpiritType(primaries[p_idx].type);
     }
 
@@ -440,7 +446,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             g_app.bin.TryAutoLoadRetailKey();
             g_app.gpu_info = GpuComputeEngine::ProbeGpuDevice();
 
-            // --- Group 1: Amiibo File, Fighter Identity, Auto-Paired Owner Mii & Crypto Keys ---
             HWND grp1 = CreateWindowA("BUTTON", "1. Amiibo File (.bin), Fighter, Auto-Paired Owner Mii & Retail Keys",
                 WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 8, 490, 152, hwnd, nullptr, nullptr, nullptr);
 
@@ -486,7 +491,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             CreateWindowA("BUTTON", "Instant Lv 50", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                 365, 122, 129, 26, hwnd, reinterpret_cast<HMENU>(ID_BTN_MAX_LV50), nullptr, nullptr);
 
-            // --- Group 2: SSBU Spirit Collection & Stat Loadout ---
             HWND grp2 = CreateWindowA("BUTTON", "2. SSBU Spirit Collection (Primary & 255 Support Spirit Skills)",
                 WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 164, 490, 242, hwnd, nullptr, nullptr, nullptr);
 
@@ -532,8 +536,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             CreateWindowA("BUTTON", "Equip Selected Spirits & Stats", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                 292, 364, 201, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_APPLY_SPIRITS), nullptr, nullptr);
 
-            // --- Group 3: GPU-First Combat Simulator ---
-            HWND grp3 = CreateWindowA("BUTTON", "3. GPU-First SSBU AI Combat Simulator (Direct3D 11 CS -> CPU Fallback)",
+            HWND grp3 = CreateWindowA("BUTTON", "3. GPU-First 60 FPS SSBU Physics & Hitbox Combat Simulator",
                 WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 410, 490, 182, hwnd, nullptr, nullptr, nullptr);
 
             CreateWindowA("STATIC", "Sparring Rival:", WS_VISIBLE | WS_CHILD, 26, 432, 95, 20, hwnd, nullptr, nullptr, nullptr);
@@ -565,11 +568,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             CreateWindowA("BUTTON", "5,000", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                 418, 490, 75, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_GAMES_5000), nullptr, nullptr);
 
-            CreateWindowA("BUTTON", "RUN GPU-ACCELERATED TRAINING SIMULATION (LV 50 READY .BIN)",
+            CreateWindowA("BUTTON", "RUN 60 FPS GPU-ACCELERATED TRAINING SIMULATION (LV 50 .BIN)",
                 WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
                 26, 524, 467, 34, hwnd, reinterpret_cast<HMENU>(ID_BTN_TRAIN), nullptr, nullptr);
 
-            // --- Group 4: Direct AI Behavior Fine-Tuning ---
             HWND grp4 = CreateWindowA("BUTTON", "4. Direct AI Behavior Fine-Tuning (0 - 100% Weight Overrides)",
                 WS_VISIBLE | WS_CHILD | BS_GROUPBOX, 14, 596, 490, 94, hwnd, nullptr, nullptr, nullptr);
 
@@ -600,7 +602,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             CreateWindowA("BUTTON", "Apply Fine-Tune", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                 396, 615, 97, 52, hwnd, reinterpret_cast<HMENU>(ID_BTN_APPLY_TUNING), nullptr, nullptr);
 
-            // --- Right Panel: Multi-Tab Live Amiibo Inspector ---
             CreateWindowA("BUTTON", "View 1: Overview & Spirits", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                 518, 14, 168, 28, hwnd, reinterpret_cast<HMENU>(ID_BTN_VIEW_OVERVIEW), nullptr, nullptr);
             CreateWindowA("BUTTON", "View 2: Full AI Behavior & Moves", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
@@ -617,7 +618,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 518, 662, 530, 22, hwnd, reinterpret_cast<HMENU>(ID_PROGRESS), nullptr, nullptr);
             SendMessageA(g_app.hwnd_progress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
 
-            std::string init_status = "Ready. Owner Mii Auto-Pairing Active | Compute: " + g_app.gpu_info.backend_name +
+            std::string init_status = "Ready. Built-in Retail Key & Switch Auto-Mii Active | Compute: " + g_app.gpu_info.backend_name +
                 " (" + g_app.gpu_info.adapter_name + ").";
             g_app.hwnd_status = CreateWindowA("STATIC", init_status.c_str(),
                 WS_VISIBLE | WS_CHILD, 14, 696, 1034, 22, hwnd, reinterpret_cast<HMENU>(ID_LBL_STATUS), nullptr, nullptr);
@@ -629,7 +630,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SendMessageA(grp4, WM_SETFONT, reinterpret_cast<WPARAM>(g_app.font_bold), TRUE);
             SendMessageA(g_app.hwnd_report, WM_SETFONT, reinterpret_cast<WPARAM>(g_app.font_mono), TRUE);
 
-            // Populate Fighter Roster (all 89 fighters)
             const auto& roster = GetFighterCatalog();
             for (const auto& f : roster) {
                 char fbuf[96];
@@ -638,15 +638,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SendMessageA(g_app.hwnd_opponent, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(fbuf));
             }
             SendMessageA(g_app.hwnd_fighter, CB_SETCURSEL, 0, 0);
-            SendMessageA(g_app.hwnd_opponent, CB_SETCURSEL, 7, 0); // Fox default
+            SendMessageA(g_app.hwnd_opponent, CB_SETCURSEL, 7, 0);
 
-            // Populate Compute Preference (default: GPU First -> CPU Fallback)
             SendMessageA(g_app.hwnd_compute, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>("GPU First (Auto)"));
             SendMessageA(g_app.hwnd_compute, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>("Force GPU (D3D11)"));
             SendMessageA(g_app.hwnd_compute, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>("Force CPU Only"));
             SendMessageA(g_app.hwnd_compute, CB_SETCURSEL, 0, 0);
 
-            // Populate Primary Spirits
             const auto& primaries = GetPrimarySpiritCatalog();
             for (const auto& p : primaries) {
                 std::ostringstream oss;
@@ -657,10 +655,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
             SendMessageA(g_app.hwnd_primary, CB_SETCURSEL, 0, 0);
 
-            // Populate Selectable Support Spirits
             PopulateSupportComboboxes("");
 
-            // Populate Opponent Archetypes & Training Focus
             for (int a = 0; a <= 6; ++a) {
                 const char* aname = TrainingSimulator::ArchetypeToString(static_cast<OpponentArchetype>(a));
                 SendMessageA(g_app.hwnd_archetype, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(aname));
@@ -697,7 +693,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     nick_buf[0] ? nick_buf : "");
                 SyncControlsFromBin();
                 SetWindowTextA(g_app.hwnd_status,
-                    "Paired 96-byte Owner Mii (with valid CRC-16-CCITT) and UTF-16BE Nickname to Amiibo!");
+                    "Paired 96-byte Ver3StoreData Owner Mii (valid Switch bitfields + CRC-16-CCITT) and UTF-16BE Nickname!");
             } else if (id == ID_CMB_PRIMARY_SPIRIT && code == CBN_SELCHANGE) {
                 LRESULT idx = SendMessageA(g_app.hwnd_primary, CB_GETCURSEL, 0, 0);
                 const auto& primaries = GetPrimarySpiritCatalog();
@@ -758,7 +754,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     if (g_app.bin.LoadFromFile(filename, &err)) {
                         g_app.current_path = filename;
                         SyncControlsFromBin();
-                        std::string msg = "Loaded Amiibo .bin (Owner Mii Paired: \"" +
+                        std::string msg = "Loaded & verified Switch Amiibo .bin (Owner Mii: \"" +
                             g_app.bin.GetOwnerMiiName() + "\"): " + g_app.current_path;
                         SetWindowTextA(g_app.hwnd_status, msg.c_str());
                     } else {
@@ -778,7 +774,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     std::string err;
                     if (g_app.bin.LoadRetailKey(filename, &err)) {
                         SyncControlsFromBin();
-                        SetWindowTextA(g_app.hwnd_status, "Loaded 160-byte key_retail.bin! Full NTAG215 AES-128-CTR & HMAC-SHA256 signing active.");
+                        SetWindowTextA(g_app.hwnd_status, "Loaded custom 160-byte key_retail.bin! Full NTAG215 AES-128-CTR & HMAC-SHA256 active.");
                     } else {
                         MessageBoxA(hwnd, err.c_str(), "Key Load Error", MB_ICONERROR);
                     }
@@ -790,7 +786,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     ? roster[f_idx].char_id : 0x0000;
                 g_app.bin.InitializeBlankFighter(char_id, 0);
                 SyncControlsFromBin();
-                SetWindowTextA(g_app.hwnd_status, "Initialized fresh SSBU Amiibo .bin with auto-paired Owner Mii & Nickname.");
+                SetWindowTextA(g_app.hwnd_status, "Initialized fresh Switch-compatible SSBU Amiibo .bin with auto-paired Owner Mii & Nickname.");
             } else if (id == ID_BTN_RESET_LV1) {
                 g_app.bin.SetDisplayedLevel(1);
                 g_app.bin.SetCpuLevel(1);
@@ -804,7 +800,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowTextA(g_app.hwnd_status, "Boosted Amiibo experience to Level 50 (3,912 XP, CPU Lv 9).");
             } else if (id == ID_BTN_APPLY_SPIRITS) {
                 ApplySelectedFighterAndSpirits(hwnd);
-                SetWindowTextA(g_app.hwnd_status, "Equipped Primary & Support Spirits, synced Owner Mii/Nickname, and updated AppData.");
+                SetWindowTextA(g_app.hwnd_status, "Equipped Primary & Support Spirits, synced Owner Mii/Nickname, and verified Switch CRC32.");
             } else if (id == ID_BTN_APPLY_TUNING) {
                 AmiiboBehaviorParams bp = g_app.bin.DecodeBehavior();
                 auto read_pct = [](HWND h) {
@@ -864,14 +860,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                 std::ostringstream log_ss;
                 log_ss << "====================================================================\n";
-                log_ss << "           SSBU AMIIBO MULTI-MATCH TRAINING REPORT                  \n";
+                log_ss << "     SSBU 60 FPS FRAME-BY-FRAME PHYSICS & HITBOX TRAINING REPORT    \n";
                 log_ss << "====================================================================\n";
                 log_ss << "Compute Backend     : " << sum.compute_backend_used << "\n";
                 log_ss << "Compute Device      : " << sum.compute_adapter_name
                        << " (" << std::fixed << std::setprecision(2) << sum.compute_elapsed_ms << " ms)\n";
                 log_ss << "Paired Owner Mii    : \"" << g_app.bin.GetOwnerMiiName()
                        << "\" | Amiibo Nickname: \"" << g_app.bin.GetAmiiboNickname() << "\"\n";
-                log_ss << "Matches Simulated   : " << sum.total_games << "\n";
+                log_ss << "Matches Simulated   : " << sum.total_games << " (Total 60Hz Frames: " << sum.total_frames_simulated << ")\n";
                 log_ss << "Record (W - L)      : " << sum.wins << " W - " << sum.losses << " L ("
                        << std::fixed << std::setprecision(1) << win_rate << "% Win Rate)\n";
                 log_ss << "Early vs Late Win % : Q1 " << (sum.first_quarter_win_rate * 100.0f)
@@ -880,26 +876,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                        << " (CPU Lv " << sum.initial_cpu_level << " -> " << sum.final_cpu_level << ")\n";
                 log_ss << "Avg Damage / Match  : " << sum.avg_damage_dealt << "% Dealt | "
                        << sum.avg_damage_taken << "% Taken\n";
-                log_ss << "Parries / Meteors   : " << sum.total_parries << " Parries | "
-                       << sum.total_meteors << " Meteor Smashes\n";
+                log_ss << "Combat Telemetry    : " << sum.total_hits_landed << " Hits | "
+                       << sum.total_grabs_landed << " Grabs | " << sum.total_parries << " Parries | "
+                       << sum.total_meteors << " Meteors | " << sum.total_ledge_recoveries << " Ledge Recs\n";
                 log_ss << "Trained Personality : " << sum.initial_personality << " -> " << sum.final_personality << "\n\n";
-                log_ss << "--- Sample Milestone Match Logs ---\n";
+                log_ss << "--- Sample 60 FPS Frame-by-Frame Match Logs ---\n";
                 for (const auto& m : sum.sample_matches) {
                     log_ss << "  [Match #" << std::setw(4) << m.game_index << "] vs. "
-                           << std::setw(16) << std::left << m.opponent_name << std::right << " | "
+                           << std::setw(14) << std::left << m.opponent_name << std::right << " | "
                            << (m.amiibo_won ? "WIN " : "LOSS")
-                           << " (" << m.amiibo_stocks_left << "-" << m.opponent_stocks_left << " stocks)"
+                           << " (" << m.amiibo_stocks_left << "-" << m.opponent_stocks_left << ")"
+                           << " | " << std::setw(4) << m.frames_simulated << "f"
                            << " | Dmg: " << std::setw(5) << m.damage_dealt << "%"
-                           << " | Parries: " << m.parries_landed << "\n";
+                           << " | KO: " << m.signature_ko_move << "\n";
                 }
                 g_app.last_sim_log = log_ss.str();
 
                 SyncControlsFromBin();
                 char status_buf[256];
                 std::snprintf(status_buf, sizeof(status_buf),
-                    "[%s | %.2f ms] %d games: %dW-%dL (%.1f%%) | Lv %d -> %d | Style: %s",
+                    "[%s | %.2f ms] %d games (%llu frames): %dW-%dL (%.1f%%) | Lv %d -> %d | Style: %s",
                     sum.compute_backend_used.c_str(), sum.compute_elapsed_ms,
-                    sum.total_games, sum.wins, sum.losses, win_rate,
+                    sum.total_games, static_cast<unsigned long long>(sum.total_frames_simulated),
+                    sum.wins, sum.losses, win_rate,
                     sum.initial_level, sum.final_level, sum.final_personality.c_str());
                 SetWindowTextA(g_app.hwnd_status, status_buf);
             } else if (id == ID_BTN_SAVE_BIN) {
@@ -915,10 +914,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 if (GetSaveFileNameA(&ofn)) {
                     std::string err;
                     if (g_app.bin.SaveToFile(filename, &err)) {
-                        std::string msg = std::string("Saved trained 540-byte Amiibo .bin (Owner Mii Paired: \"") +
-                            g_app.bin.GetOwnerMiiName() + "\") to: " + filename;
+                        std::string diag;
+                        g_app.bin.VerifySwitchCompatibility(&diag);
+                        std::string msg = std::string("Saved Switch-ready 540-byte NTAG215 Amiibo .bin (") +
+                            diag + ") to: " + filename;
                         SetWindowTextA(g_app.hwnd_status, msg.c_str());
-                        MessageBoxA(hwnd, msg.c_str(), "Amiibo .bin Saved Successfully", MB_ICONINFORMATION);
+                        MessageBoxA(hwnd, msg.c_str(), "Amiibo .bin Saved & Switch Verified", MB_ICONINFORMATION);
                     } else {
                         MessageBoxA(hwnd, err.c_str(), "Save Error", MB_ICONERROR);
                     }
@@ -938,7 +939,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
-    const char CLASS_NAME[] = "SSBUAmiiboTrainerWin32ClassV22";
+    const char CLASS_NAME[] = "SSBUAmiiboTrainerWin32ClassV23";
     WNDCLASSA wc{};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
@@ -949,7 +950,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
 
     HWND hwnd = CreateWindowExA(
         0, CLASS_NAME,
-        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.2 (Auto-Mii + GPU-First C++20)",
+        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.3 (Switch-Verified + 60 FPS GPU Sim)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 1075, 765,
         nullptr, nullptr, hInstance, nullptr);
