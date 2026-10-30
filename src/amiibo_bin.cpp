@@ -44,7 +44,6 @@ constexpr uint8_t kBuiltInRetailKey[160] = {
     0xEF,0x39,0x2F,0xA2,0xB1,0x28,0xE2,0xF7,0x88,0xC0,0xD4,0x4A,0x5A,0xC5,0xC3,0x52
 };
 
-// Canonical Super Smash Bros. Amiibo 16-bit Model Number lookup for 8-byte Figure ID
 static uint16_t LookupSmashAmiiboModelNumber(uint16_t char_id) {
     switch (char_id) {
         case 0x0000: return 0x0000; // Mario
@@ -138,10 +137,6 @@ static uint16_t LookupSmashAmiiboModelNumber(uint16_t char_id) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// CRC-16-CCITT (0x1021, init 0x0000) for 96-byte 3DS/WiiU/Switch Mii StoreData
-// & IEEE 802.3 CRC-32 for Amiibo Application Data
-// ---------------------------------------------------------------------------
 static uint16_t ComputeCrc16Ccitt(const uint8_t* bytes, size_t len) {
     uint16_t crc = 0x0000;
     for (size_t i = 0; i < len; ++i) {
@@ -166,9 +161,6 @@ static uint32_t ComputeCrc32(const uint8_t* bytes, size_t len) {
     return ~crc;
 }
 
-// ---------------------------------------------------------------------------
-// Portable SHA-256 & HMAC-SHA256
-// ---------------------------------------------------------------------------
 struct Sha256Ctx {
     uint32_t state[8];
     uint64_t bitlen;
@@ -182,7 +174,7 @@ static const uint32_t kSha256K[64] = {
     0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
     0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
     0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-    0983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
     0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
     0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
     0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
@@ -277,9 +269,6 @@ static void HmacSha256(const uint8_t* key, size_t key_len,
     Sha256Compute(outer, sizeof(outer), out);
 }
 
-// ---------------------------------------------------------------------------
-// Portable AES-128 & AES-128-CTR (for nfc3d_amiibo_cipher)
-// ---------------------------------------------------------------------------
 static const uint8_t kAesSbox[256] = {
   0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
   0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
@@ -367,9 +356,6 @@ static void Aes128CtrCrypt(const uint8_t aes_key[16], const uint8_t aes_iv[16],
     }
 }
 
-// ---------------------------------------------------------------------------
-// nfc3d Key Derivation & Unpack/Pack (from socram8888/amiitool & Thenaya)
-// ---------------------------------------------------------------------------
 #pragma pack(push, 1)
 struct Nfc3dMasterKey {
     uint8_t hmacKey[16];
@@ -470,7 +456,6 @@ static void Nfc3dPack(const Nfc3dAmiiboKeys& keys, const uint8_t* plain540, uint
 
     HmacSha256(tagKeys.hmacKey, sizeof(tagKeys.hmacKey), plain540 + 0x1D4, 0x34, cipher + 0x1B4);
 
-    // Data HMAC over plain[0x029..0x1B3] (0x18B) + cipher[0x1B4..0x1D3] (0x20) + plain[0x1D4..0x207] (0x34)
     uint8_t data_hmac_input[0x18B + 0x20 + 0x34]{};
     std::memcpy(data_hmac_input, plain540 + 0x029, 0x18B);
     std::memcpy(data_hmac_input + 0x18B, cipher + 0x1B4, 0x20);
