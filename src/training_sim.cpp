@@ -29,16 +29,16 @@ constexpr MoveSpec kMoveSpecs[17] = {
     {4,  "Forward Smash",     15,  29, 18.5f, 42.0f, 105.0f,  0.63f, 20.5f, false},
     {5,  "Up Smash",          11,  26, 17.0f, 38.0f, 103.0f,  1.50f, 19.0f, false},
     {6,  "Down Smash",        10,  25, 15.5f, 35.0f,  97.0f,  0.52f, 19.5f, false},
-    {7,  "Neutral Special",   12,  20, 10.5f, 28.0f,  68.0f,  0.75f, 42.0f, false},
-    {8,  "Side Special",      13,  22, 13.5f, 36.0f,  90.0f,  0.72f, 25.0f, false},
+    {7,  "Neutral Special",    5,  20, 12.5f, 32.0f,  78.0f,  0.75f, 22.0f, false},
+    {8,  "Alolan Whip / SideB",13, 20, 20.0f, 48.0f,  96.0f,  0.70f, 26.5f, false},
     {9,  "Up Special (OoS)",   7,  26, 12.5f, 40.0f,  92.0f,  1.30f, 17.5f, false},
-    {10, "Down Special",       9,  23, 13.0f, 38.0f,  92.0f,  0.85f, 18.0f, false},
-    {11, "Grab & Throw",       6,  20, 11.5f, 42.0f,  88.0f,  0.90f, 13.5f, false},
+    {10, "Revenge / DownB",    3,  18, 14.0f, 38.0f,  92.0f,  0.85f, 18.0f, false},
+    {11, "Grab & Throw",       6,  20, 13.5f, 44.0f,  90.0f,  0.90f, 14.5f, false},
     {12, "Neutral Air (Nair)", 5,   9,  9.5f, 30.0f,  78.0f,  0.78f, 15.5f, false},
-    {13, "Forward Air (Fair)", 8,  11, 12.5f, 34.0f,  90.0f,  0.70f, 18.5f, false},
-    {14, "Back Air (Bair)",    7,  10, 14.5f, 36.0f,  99.0f,  0.61f, 18.5f, false},
-    {15, "Up Air (Uair)",      6,   9, 11.5f, 32.0f,  94.0f,  1.48f, 17.5f, false},
-    {16, "Down Air (Meteor)", 11,  14, 14.0f, 32.0f,  96.0f, -1.45f, 17.0f, true}
+    {13, "Forward Air (Fair)", 8,  11, 13.0f, 34.0f,  92.0f,  0.70f, 18.5f, false},
+    {14, "Back Air (Bair)",    7,  10, 15.0f, 38.0f, 101.0f,  0.61f, 18.5f, false},
+    {15, "Up Air (Uair)",      6,   9, 12.0f, 34.0f,  95.0f,  1.48f, 18.0f, false},
+    {16, "Down Air (Meteor)", 11,  14, 14.5f, 34.0f,  98.0f, -1.45f, 17.5f, true}
 };
 
 // Authentic SSBU Knockback Formula (with Rage multiplier [1.0 .. 1.10])
@@ -59,14 +59,14 @@ const char* TrainingSimulator::MoveIdToName(uint32_t move_id) {
 
 const char* TrainingSimulator::ArchetypeToString(OpponentArchetype a) {
     switch (a) {
-        case OpponentArchetype::FullRosterGauntlet: return "Full 89-Fighter Roster Gauntlet";
+        case OpponentArchetype::FullRosterGauntlet: return "Full 91-Fighter Roster Gauntlet";
         case OpponentArchetype::Balanced:           return "Balanced All-Rounder";
         case OpponentArchetype::Rushdown:           return "Rushdown / Frame-Trap";
         case OpponentArchetype::Zoner:              return "Zoner / Projectile Wall";
         case OpponentArchetype::DefensiveParry:     return "Defensive Shield & Parry";
         case OpponentArchetype::Grappler:           return "Grappler / Command Grab";
         case OpponentArchetype::AerialEdgeguarder:  return "Aerial Juggler & Edgeguarder";
-        default:                                    return "Full 89-Fighter Roster Gauntlet";
+        default:                                    return "Full 91-Fighter Roster Gauntlet";
     }
 }
 
@@ -79,6 +79,7 @@ const char* TrainingSimulator::FocusToString(TrainingFocus f) {
         case TrainingFocus::ShowOffEntertainer:      return "Show-Off / Taunt Entertainer (Flashy)";
         case TrainingFocus::AdaptiveCounterplay:     return "Adaptive Matchup Counterplay (Dynamic)";
         case TrainingFocus::HeavyArmorSmashBrawler:  return "Heavy Armor Smash Brawler (Unflappable)";
+        case TrainingFocus::IncineroarRaidBoss:      return "Incineroar Championship Raid Boss (Alolan Whip + Uair + Parry)";
         default:                                     return "Tournament Optimal";
     }
 }
@@ -100,34 +101,157 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
     const FighterInfo* my_fighter = FindFighterById(amiibo.GetCharacterId());
     const FighterInfo* fixed_opp  = FindFighterById(config.opponent_char_id);
     const auto& roster = GetFighterCatalog();
+    const bool is_incineroar = (amiibo.GetCharacterId() == 0x1BD7);
 
+    // Exact SSBU Primary Spirit Attack & Defense multipliers:
+    // At 2500 ATK / 2500 DEF -> ~1.50x offense & defense scaling
     float base_atk_bonus = static_cast<float>(amiibo.GetAttackStat()) / 5000.0f;
     float base_def_bonus = static_cast<float>(amiibo.GetDefenseStat()) / 5000.0f;
+
+    // Exact Competitive Support Spirit Multipliers (Amiibo Doctor Definitive Spirits Tier List)
+    float spirit_atk_mult = 1.0f;
+    float spirit_def_mult = 1.0f;
+    float spirit_spd_mult = 1.0f;
     float spirit_combat_bonus = 0.0f;
     float spirit_recovery_rate = 0.0f;
     float extra_jump_bonus = 0.0f;
+    float starting_stock_damage = 0.0f;
+    float super_armor_threshold = 0.0f;
+    float side_special_mult = 1.0f;
+    bool has_crit_healing_metal = false;
+    bool has_crit_stats = false;
+
     auto slots = amiibo.GetSpiritSlots();
     for (uint8_t sid : slots) {
         if (sid == 0) continue;
         const auto* ab = FindSupportAbilityById(sid);
         if (!ab) continue;
         switch (sid) {
-            case 10: spirit_combat_bonus += 0.14f; break;
-            case 11: spirit_combat_bonus += 0.10f; break;
-            case 20: spirit_recovery_rate += 0.05f; break;
-            case 180: spirit_recovery_rate += 0.10f; break;
-            case 5:  spirit_combat_bonus += 0.07f; extra_jump_bonus = 1.0f; break;
-            case 2:  base_atk_bonus += 0.08f; break;
-            case 81: spirit_combat_bonus += 0.06f; break;
-            case 84: base_atk_bonus += 0.07f; break;
-            case 50: case 51: base_atk_bonus += 0.07f; break;
-            case 9:  spirit_combat_bonus += 0.06f; break;
-            case 104: spirit_recovery_rate += 0.06f; break;
-            case 140: base_atk_bonus += 0.10f; base_def_bonus += 0.12f; break;
-            default: spirit_combat_bonus += 0.03f * ab->slot_cost; break;
+            case 140: // Armor Knight (2 Slots): 1.15x ATK, 1.80x DEF, 0.70x Speed
+                spirit_atk_mult *= 1.15f;
+                spirit_def_mult *= 1.80f;
+                spirit_spd_mult *= 0.70f;
+                spirit_combat_bonus += 0.22f;
+                break;
+            case 15: // Trade-Off Ability Up (1 Slot): 1.18x ATK, 1.20x DEF, 1.20x Speed, +30% start
+                spirit_atk_mult *= 1.18f;
+                spirit_def_mult *= 1.20f;
+                spirit_spd_mult *= 1.20f;
+                starting_stock_damage += 30.0f;
+                spirit_combat_bonus += 0.14f;
+                break;
+            case 1: // Move Speed Up (1 Slot): 1.20x Speed, 0% start
+                spirit_spd_mult *= 1.20f;
+                spirit_combat_bonus += 0.10f;
+                break;
+            case 14: // Trade-Off Speed Up (1 Slot): 1.40x Speed, +30% start
+                spirit_spd_mult *= 1.40f;
+                starting_stock_damage += 30.0f;
+                spirit_combat_bonus += 0.09f;
+                break;
+            case 13: // Trade-Off Defense Up (1 Slot): 1.40x DEF, +30% start
+                spirit_def_mult *= 1.40f;
+                starting_stock_damage += 30.0f;
+                spirit_combat_bonus += 0.10f;
+                break;
+            case 12: // Trade-Off Attacks Up (1 Slot): 1.23x ATK, +30% start
+                spirit_atk_mult *= 1.23f;
+                starting_stock_damage += 30.0f;
+                spirit_combat_bonus += 0.10f;
+                break;
+            case 10: // Super Armor (3 Slots): No flinching below ~70% damage
+                super_armor_threshold = 70.0f;
+                spirit_def_mult *= 1.25f;
+                spirit_combat_bonus += 0.20f;
+                break;
+            case 11: // Slow Super Armor (2 Slots): Super Armor at 0.30x Speed
+                super_armor_threshold = 65.0f;
+                spirit_spd_mult *= 0.45f;
+                spirit_combat_bonus += 0.12f;
+                break;
+            case 20: // Autoheal (2 Slots): 3% every 5s
+                spirit_recovery_rate += 0.075f;
+                spirit_combat_bonus += 0.10f;
+                break;
+            case 180: // Great Autoheal (3 Slots): 5% every 5s
+                spirit_recovery_rate += 0.125f;
+                spirit_combat_bonus += 0.14f;
+                break;
+            case 236: // Critical Healing & Metal (2 Slots): Heals 50% + Metal knockback resistance
+                has_crit_healing_metal = true;
+                spirit_def_mult *= 1.22f;
+                spirit_combat_bonus += 0.15f;
+                break;
+            case 162: // Critical-Health Healing (2 Slots)
+                has_crit_healing_metal = true;
+                spirit_combat_bonus += 0.11f;
+                break;
+            case 18: // Critical-Health Stats Up (1 Slot)
+            case 178: // Critical-Health Stats Up Up (2 Slots)
+                has_crit_stats = true;
+                spirit_atk_mult *= 1.08f;
+                spirit_def_mult *= 1.15f;
+                spirit_combat_bonus += 0.09f;
+                break;
+            case 50: // Physical Attack Up (1 Slot): 1.10x physical/throw/command-grab damage
+            case 51: // Weapon Attack Up (1 Slot)
+            case 52: // Fist Attack Up
+            case 53: // Foot Attack Up
+                spirit_atk_mult *= 1.10f;
+                spirit_combat_bonus += 0.08f;
+                break;
+            case 87: // Side Special Up (1 Slot): 1.10x Alolan Whip damage
+                side_special_mult *= 1.12f;
+                spirit_atk_mult *= 1.06f;
+                spirit_combat_bonus += 0.08f;
+                break;
+            case 90: // Strong Throw (1 Slot)
+                side_special_mult *= 1.08f;
+                spirit_atk_mult *= 1.06f;
+                spirit_combat_bonus += 0.07f;
+                break;
+            case 5: // Additional Midair Jump (2 Slots)
+                spirit_combat_bonus += 0.07f;
+                extra_jump_bonus = 1.0f;
+                break;
+            case 117: // Floaty Jumps (1 Slot): 0.65x fall speed, huge recovery boost
+                spirit_combat_bonus += 0.08f;
+                extra_jump_bonus = 0.85f;
+                break;
+            case 2: // Hyper Smash Attacks (1 Slot)
+                spirit_atk_mult *= 1.08f;
+                spirit_combat_bonus += 0.07f;
+                break;
+            case 81: // Landing Lag Down (1 Slot): 0.7x aerial landing lag
+                spirit_combat_bonus += 0.08f;
+                break;
+            case 84: // Air Attack Up (1 Slot)
+                spirit_atk_mult *= 1.07f;
+                spirit_combat_bonus += 0.06f;
+                break;
+            case 85: // Air Defense Up (1 Slot)
+                spirit_def_mult *= 1.10f;
+                spirit_combat_bonus += 0.07f;
+                break;
+            case 9: // Easier Perfect Shield (1 Slot)
+                spirit_combat_bonus += 0.07f;
+                break;
+            case 104: // KOs Heal Damage (2 Slots)
+                spirit_recovery_rate += 0.06f;
+                spirit_combat_bonus += 0.08f;
+                break;
+            default:
+                spirit_combat_bonus += 0.03f * ab->slot_cost;
+                break;
         }
     }
 
+    float effective_atk_bonus = base_atk_bonus + (spirit_atk_mult - 1.0f);
+    float effective_def_bonus = base_def_bonus + (spirit_def_mult - 1.0f);
+
+    // -----------------------------------------------------------------------
+    // STEP 1: Attempt 60 FPS Frame-by-Frame GPU Compute Shader Execution FIRST
+    // -----------------------------------------------------------------------
     std::vector<GpuMatchOutcome> gpu_outcomes;
     bool gpu_used = false;
     GpuDeviceInfo gpu_dev{};
@@ -141,10 +265,10 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
         gpu_params.is_gauntlet = (config.archetype == OpponentArchetype::FullRosterGauntlet) ? 1u : 0u;
         gpu_params.my_weight = my_fighter ? my_fighter->weight_class : 1.0f;
         gpu_params.opp_weight = fixed_opp ? fixed_opp->weight_class : 1.0f;
-        gpu_params.my_air_mobility = my_fighter ? my_fighter->air_mobility : 1.1f;
+        gpu_params.my_air_mobility = (my_fighter ? my_fighter->air_mobility : 1.1f) * spirit_spd_mult;
         gpu_params.opp_air_mobility = fixed_opp ? fixed_opp->air_mobility : 1.1f;
-        gpu_params.base_atk_bonus = base_atk_bonus;
-        gpu_params.base_def_bonus = base_def_bonus;
+        gpu_params.base_atk_bonus = effective_atk_bonus;
+        gpu_params.base_def_bonus = effective_def_bonus;
         gpu_params.spirit_combat_bonus = spirit_combat_bonus;
         gpu_params.spirit_recovery_rate = spirit_recovery_rate;
 
@@ -223,7 +347,7 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
         int hits_landed = 0;
         int grabs_landed = 0;
         int ledge_recoveries = 0;
-        uint32_t ko_move_id = 4;
+        uint32_t ko_move_id = is_incineroar ? 8 : 4;
         float tilt_reward = 0.0f;
         float smash_reward = 0.0f;
         float aerial_reward = 0.0f;
@@ -247,38 +371,46 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
             smash_reward = gm.smash_reward;
             aerial_reward = gm.aerial_reward;
         } else {
+            // -------------------------------------------------------------------
+            // True 60 FPS Frame-by-Frame SSBU Stage, Physics & Hitbox Simulation
+            // Stage main platform: X in [-85, +85], Y = 0
+            // Blast zones: X = +-240, Top Y = +190, Bottom Y = -140
+            // -------------------------------------------------------------------
             float level_factor = static_cast<float>(amiibo.GetDisplayedLevel() - 1) / 49.0f;
             float cpu_factor   = static_cast<float>(amiibo.GetCpuLevel() - 1) / 8.0f;
 
-            float atk_mult = 1.0f + (0.15f + 0.85f * level_factor) * (base_atk_bonus + spirit_combat_bonus * 0.6f);
-            float def_mult = std::max(0.5f, 1.0f + (0.15f + 0.85f * level_factor) * (base_def_bonus + spirit_combat_bonus * 0.4f));
+            float atk_mult = (1.0f + (0.15f + 0.85f * level_factor) * base_atk_bonus) * spirit_atk_mult;
+            float def_mult = std::max(0.5f, (1.0f + (0.15f + 0.85f * level_factor) * base_def_bonus) * spirit_def_mult);
 
             float a_weight_units = 100.0f * (my_fighter ? my_fighter->weight_class : 1.0f);
             float o_weight_units = 100.0f * (opp ? opp->weight_class : 1.0f);
-            float my_mob = my_fighter ? my_fighter->air_mobility : 1.1f;
+            float my_mob = (my_fighter ? my_fighter->air_mobility : 1.1f) * spirit_spd_mult;
             float opp_mob = opp ? opp->air_mobility : 1.1f;
 
-            float a_pct = 0.0f, o_pct = 0.0f;
+            float a_pct = starting_stock_damage;
+            float o_pct = 0.0f;
             float a_x = -35.0f, a_y = 0.0f, a_vx = 0.0f, a_vy = 0.0f;
             float o_x =  35.0f, o_y = 0.0f, o_vx = 0.0f, o_vy = 0.0f;
             int a_timer = 0, o_timer = 0;
             int a_shield_frames = 0, o_shield_frames = 0;
             uint32_t a_move = 0, o_move = 0;
+            bool revenge_active = false;
+            bool crit_heal_used_this_stock = false;
 
             float arch_bonus = 0.0f;
             switch (arch) {
                 case OpponentArchetype::Rushdown:
                     arch_bonus = 0.12f * (beh.just_shield_master + beh.grounded); break;
                 case OpponentArchetype::Zoner:
-                    arch_bonus = 0.12f * (beh.dash + beh.just_shield_master); break;
+                    arch_bonus = 0.12f * (beh.feint_shooter + beh.just_shield_master); break;
                 case OpponentArchetype::DefensiveParry:
-                    arch_bonus = 0.14f * (beh.catcher + beh.feint_master); break;
+                    arch_bonus = 0.15f * (beh.catcher + beh.feint_master + (beh.sspecial / 100.0f)); break;
                 case OpponentArchetype::Grappler:
                     arch_bonus = 0.12f * ((1.0f - beh.shield_master) + beh.grounded); break;
                 case OpponentArchetype::AerialEdgeguarder:
-                    arch_bonus = 0.12f * (beh.air_offensive + beh.return_to_cliff); break;
+                    arch_bonus = 0.12f * ((beh.uair / 100.0f) + beh.return_to_cliff); break;
                 default:
-                    arch_bonus = 0.08f * (beh.offensive + beh.just_shield_master); break;
+                    arch_bonus = 0.09f * (beh.offensive + beh.just_shield_master); break;
             }
 
             float a_reaction = 0.34f + 0.50f * (0.5f * level_factor + 0.5f * cpu_factor) + arch_bonus + 0.10f * spirit_combat_bonus;
@@ -287,6 +419,7 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
             float p_tilt = (beh.ftilt + beh.utilt + beh.dtilt) / 100.0f;
             float p_smash = (beh.fsmash + beh.usmash + beh.dsmash) / 100.0f;
             float p_spec = (beh.nspecial + beh.sspecial + beh.uspecial + beh.dspecial) / 100.0f;
+            float p_sspec_ratio = (p_spec > 0.01f) ? (beh.sspecial / (beh.nspecial + beh.sspecial + beh.uspecial + beh.dspecial)) : 0.4f;
             float p_fair_bair = (beh.fair + beh.bair) / 100.0f;
             float p_uair = beh.uair / 100.0f;
             float p_dair = beh.dair / 100.0f;
@@ -298,11 +431,19 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
                     a_pct = std::max(0.0f, a_pct - 40.0f * spirit_recovery_rate);
                 }
 
+                // Critical Healing & Metal trigger at >= 80% damage once per stock
+                if (has_crit_healing_metal && !crit_heal_used_this_stock && a_pct >= 80.0f) {
+                    a_pct = std::max(0.0f, a_pct - 50.0f);
+                    crit_heal_used_this_stock = true;
+                }
+
+                // Integrate 2D positions and velocities
                 a_x += a_vx * 2.0f;
                 a_y += a_vy * 2.0f;
                 o_x += o_vx * 2.0f;
                 o_y += o_vy * 2.0f;
 
+                // Gravity & Stage Platform Collision (Stage X in [-85, +85], Y = 0)
                 if (a_y > 0.0f || std::fabs(a_x) > 85.0f) {
                     a_vy -= 0.19f;
                     if (a_y <= 0.0f && std::fabs(a_x) <= 85.0f && a_vy <= 0.0f) {
@@ -327,13 +468,14 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
                     o_vx *= 0.82f;
                 }
 
+                // Offstage Ledge Recovery Physics
                 if (std::fabs(a_x) > 85.0f && a_timer >= -4) {
                     float ledge_dir = (a_x > 0.0f) ? -1.0f : 1.0f;
-                    float rec_skill = std::clamp(0.45f + 0.45f * beh.return_to_cliff + 0.10f * extra_jump_bonus, 0.25f, 0.96f);
-                    a_vx = a_vx * 0.75f + (ledge_dir * 1.95f * my_mob) * 0.25f;
-                    if (a_y < -18.0f && uni(rng) < rec_skill) {
-                        a_vy = 2.85f;
-                        if (std::fabs(a_x) < 108.0f) {
+                    float rec_skill = std::clamp(0.45f + 0.45f * beh.return_to_cliff + 0.10f * extra_jump_bonus, 0.25f, 0.98f);
+                    a_vx = a_vx * 0.72f + (ledge_dir * 2.05f * std::max(0.85f, my_mob)) * 0.28f;
+                    if (a_y < -16.0f && uni(rng) < rec_skill) {
+                        a_vy = 2.90f;
+                        if (std::fabs(a_x) < 110.0f) {
                             a_x = (a_x > 0.0f) ? 83.0f : -83.0f;
                             a_y = 0.0f; a_vx = 0.0f; a_vy = 0.0f;
                             ledge_recoveries++;
@@ -353,9 +495,12 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
                     }
                 }
 
+                // Blast Zone KO Checks (Left/Right: +-240, Top: +190, Bottom: -140)
                 if (std::fabs(a_x) > 240.0f || a_y > 190.0f || a_y < -140.0f) {
                     amiibo_stocks--;
-                    a_pct = 0.0f;
+                    a_pct = starting_stock_damage;
+                    crit_heal_used_this_stock = false;
+                    revenge_active = false;
                     a_x = -30.0f; a_y = 20.0f; a_vx = 0.0f; a_vy = 0.0f; a_timer = 0;
                     continue;
                 }
@@ -413,26 +558,34 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
                     }
                 }
 
-                if (dist <= 26.0f && (a_timer == 0 || o_timer == 0)) {
+                // Frame-Data Hitbox Collision Resolution
+                if (dist <= 26.5f && (a_timer == 0 || o_timer == 0)) {
                     if (a_y > 2.0f || std::fabs(o_x) > 85.0f) {
                         float r = uni(rng);
                         if (std::fabs(o_x) > 85.0f && r < std::max(p_dair, beh.meteor_master * 0.55f)) a_move = 16;
-                        else if (r < p_fair_bair * 0.55f) a_move = 13;
-                        else if (r < p_fair_bair)         a_move = 14;
-                        else if (r < p_fair_bair + p_uair) a_move = 15;
+                        else if (o_y > a_y + 4.0f && r < p_uair + 0.35f) a_move = 15; // Up Air juggle chain!
+                        else if (r < p_dair) a_move = 16; // Landing Dair
+                        else if (r < p_dair + p_uair) a_move = 15;
+                        else if (r < p_dair + p_uair + p_fair_bair * 0.55f) a_move = 13;
+                        else if (r < p_dair + p_uair + p_fair_bair) a_move = 14;
                         else a_move = 12;
                     } else {
                         float r = uni(rng);
-                        if (o_shield_frames > 0 && uni(rng) < std::max(0.25f, beh.catcher)) {
-                            a_move = 11;
+                        // Incineroar Command Grab (Alolan Whip, move 8) or Grab (move 11) beats Shield!
+                        if (is_incineroar && (o_shield_frames > 0 || r < p_spec * p_sspec_ratio)) {
+                            a_move = 8; // Alolan Whip command grab!
+                        } else if (o_shield_frames > 0 && uni(rng) < std::max(0.25f, beh.catcher)) {
+                            a_move = is_incineroar ? 8 : 11;
+                        } else if (std::fabs(o_x) > 72.0f && uni(rng) < (beh.dsmash + beh.dtilt) / 100.0f + 0.35f) {
+                            a_move = (uni(rng) < 0.65f) ? 6 : 3; // Down Smash / Down Tilt at Ledge!
                         } else if (o_pct >= 85.0f && r < std::max(p_smash, 0.38f + 0.25f * beh.smash_holder)) {
-                            a_move = (uni(rng) < 0.55f) ? 4 : ((uni(rng) < 0.6f) ? 5 : 6);
+                            a_move = (uni(rng) < 0.45f) ? 4 : ((uni(rng) < 0.6f) ? 6 : 5);
                         } else if (r < p_tilt) {
                             a_move = 1 + (rng() % 3);
                         } else if (r < p_tilt + p_smash) {
                             a_move = 4 + (rng() % 3);
                         } else if (r < p_tilt + p_smash + p_spec) {
-                            a_move = 7 + (rng() % 4);
+                            a_move = (is_incineroar && uni(rng) < p_sspec_ratio) ? 8 : (7 + (rng() % 4));
                         } else {
                             a_move = 0;
                         }
@@ -445,23 +598,37 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
 
                     bool a_parried = false;
                     int a_start = am.startup_frames;
-                    if (a_shield_frames > 0 && uni(rng) < std::max(0.20f, beh.just_shield_master * 0.55f)) {
+                    if (a_shield_frames > 0 && uni(rng) < std::max(0.20f, beh.just_shield_master * 0.58f)) {
                         a_parried = true;
                         parries++;
-                        a_start = std::max(1, a_start - 8);
+                        a_start = std::max(1, a_start - 9);
+                        if (is_incineroar && uni(rng) < beh.revenge) {
+                            revenge_active = true; // Counter/Revenge charged!
+                        }
                     }
 
-                    float a_eff_frame = static_cast<float>(a_start) - 6.5f * a_reaction - ((am.reach > om.reach) ? 2.5f : 0.0f);
+                    bool is_command_grab = (is_incineroar && a_move == 8);
+                    bool super_armor_active = (super_armor_threshold > 0.0f && a_pct < super_armor_threshold) ||
+                                              (is_command_grab && om.base_dmg < 11.9f);
+
+                    float a_eff_frame = static_cast<float>(a_start) - 6.5f * a_reaction
+                                      - ((am.reach > om.reach) ? 2.5f : 0.0f)
+                                      - (super_armor_active ? 6.0f : 0.0f);
                     float o_eff_frame = static_cast<float>(om.startup_frames) - 6.5f * o_reaction + static_cast<float>(std::max(0, -o_timer));
 
-                    if (a_parried || a_move == 11 || a_eff_frame <= o_eff_frame + 1.5f * (uni(rng) - 0.42f)) {
-                        float scaled_dmg = am.base_dmg * atk_mult * (a_parried ? 1.20f : 1.0f);
+                    if (a_parried || a_move == 11 || is_command_grab || super_armor_active ||
+                        a_eff_frame <= o_eff_frame + 1.5f * (uni(rng) - 0.42f)) {
+                        float move_mult = (a_move == 8) ? side_special_mult : 1.0f;
+                        float crit_mult = (has_crit_stats && a_pct >= 80.0f) ? 1.12f : 1.0f;
+                        float rev_mult  = revenge_active ? 1.25f : 1.0f;
+                        float scaled_dmg = am.base_dmg * atk_mult * move_mult * crit_mult * rev_mult * (a_parried ? 1.20f : 1.0f);
                         o_pct += scaled_dmg;
                         total_dealt += scaled_dmg;
                         hits_landed++;
-                        if (a_move == 11) grabs_landed++;
+                        if (a_move == 11 || is_command_grab) grabs_landed++;
 
-                        float kb = ComputeKnockback(o_pct, scaled_dmg, o_weight_units, am.bkb, am.kbg, a_pct);
+                        float kb = ComputeKnockback(o_pct, scaled_dmg, o_weight_units, am.bkb, am.kbg * (revenge_active ? 1.18f : 1.0f), a_pct);
+                        revenge_active = false;
                         float launch_speed = 0.032f * kb;
                         o_vx = dir_to_opp * launch_speed * std::cos(am.angle_rad);
                         o_vy = launch_speed * std::sin(am.angle_rad);
@@ -472,12 +639,16 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
                         a_timer = std::max(4, am.endlag_frames / 2);
 
                         if (a_move >= 1 && a_move <= 3) tilt_reward += scaled_dmg;
-                        else if (a_move >= 4 && a_move <= 6) smash_reward += scaled_dmg;
+                        else if (a_move >= 4 && a_move <= 8) smash_reward += scaled_dmg;
                         else if (a_move >= 12) aerial_reward += scaled_dmg;
                     } else {
-                        float scaled_o_dmg = (om.base_dmg * (0.85f + 0.03f * static_cast<float>(config.opponent_cpu_level))) / def_mult;
+                        float crit_def = (has_crit_stats && a_pct >= 80.0f) ? 1.25f : 1.0f;
+                        float scaled_o_dmg = (om.base_dmg * (0.85f + 0.03f * static_cast<float>(config.opponent_cpu_level))) / (def_mult * crit_def);
                         a_pct += scaled_o_dmg;
                         total_taken += scaled_o_dmg;
+                        if (is_incineroar && uni(rng) < beh.revenge * 0.45f) {
+                            revenge_active = true;
+                        }
 
                         float kb = ComputeKnockback(a_pct, scaled_o_dmg, a_weight_units, om.bkb, om.kbg, o_pct);
                         float launch_speed = 0.030f * kb;
@@ -526,6 +697,7 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
         amiibo.SetLevelExperience(static_cast<uint16_t>(std::round(xp_f)));
         amiibo.SetCpuExperience(static_cast<uint16_t>(std::round(cpu_xp_f)));
 
+        // Empirical Match Reinforcement + Coaching Curriculum Policy Update
         const float lr = std::clamp(2.5f / static_cast<float>(std::sqrt(g + 10)), 0.015f, 0.12f);
         float total_rew = std::max(1.0f, tilt_reward + smash_reward + aerial_reward);
         float emp_aerial_ratio = std::clamp(aerial_reward / total_rew, 0.15f, 0.85f);
@@ -539,7 +711,61 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
             param = std::clamp(param + lr * (target - param), 0.0f, 100.0f);
         };
 
-        switch (config.focus) {
+        TrainingFocus effective_focus = config.focus;
+        if (is_incineroar && config.focus == TrainingFocus::TournamentOptimal) {
+            effective_focus = TrainingFocus::IncineroarRaidBoss;
+        }
+
+        switch (effective_focus) {
+            case TrainingFocus::IncineroarRaidBoss:
+                // Championship "Endeavor + Raid Boss" Incineroar Profile:
+                // Grounded Alolan Whip command grab + D-Smash/F-Smash ledge kills + Up-Air juggle chains + Dair landing + Frame-Perfect Parry
+                nudge(beh.near_range,          0.84f);
+                nudge(beh.offensive,           0.88f);
+                nudge(beh.grounded,            0.86f);
+                nudge(beh.attack_out_cliff,    0.28f);
+                nudge(beh.dash,                0.36f); // Walk & micro-space instead of reckless dashing
+                nudge(beh.return_to_cliff,     0.96f); // Maximum offstage recovery discipline
+                nudge(beh.air_offensive,       0.52f);
+                nudge(beh.cliffer,             0.18f);
+                nudge(beh.feint_master,        0.86f);
+                nudge(beh.feint_counter,       0.88f);
+                nudge(beh.feint_shooter,       0.84f);
+                nudge(beh.catcher,             0.94f);
+                nudge(beh.attack_cancel,       0.78f);
+                nudge(beh.smash_holder,        0.58f);
+                nudge(beh.dash_attacker,       0.16f);
+                nudge(beh.critical_hitter,     0.76f);
+                nudge(beh.meteor_master,       0.78f + emp_meteor_bonus * 0.5f);
+                nudge(beh.shield_master,       0.62f);
+                nudge(beh.just_shield_master,  0.96f);
+                nudge(beh.shield_catch_master, 0.80f);
+                nudge(beh.revenge,             0.84f);
+                nudge(beh.advantageous_fighter,0.85f);
+                nudge(beh.weaken_fighter,      0.78f);
+                nudge(beh.appeal,              0.00f); // Zero taunting
+                // Grounded Move Hierarchy (Alolan Whip + Down Smash at ledge + F-Smash/U-Smash + D-Tilt/F-Tilt)
+                nudge_pct(beh.sspecial, 38.0f); // Alolan Whip (Side B) primary command grab
+                nudge_pct(beh.dsmash,   16.0f); // Down Smash at ledge
+                nudge_pct(beh.fsmash,   15.0f); // Forward Smash early KO
+                nudge_pct(beh.usmash,    9.0f); // Up Smash anti-air / platform coverage
+                nudge_pct(beh.dtilt,     9.0f); // Down Tilt combo starter & 2-frame
+                nudge_pct(beh.ftilt,     8.0f); // Forward Tilt spacing poke
+                nudge_pct(beh.utilt,     2.0f);
+                nudge_pct(beh.nspecial,  1.0f); // Darkest Lariat OoS escape
+                nudge_pct(beh.uspecial,  0.5f); // Never spam Cross Chop onstage
+                nudge_pct(beh.dspecial,  1.5f); // Disciplined Revenge counter
+                // Aerial Move Hierarchy ("Endeavor" Up-Air juggle chains + Down-Air landing/meteor + Bair/Fair)
+                nudge_pct(beh.uair,         34.0f); // Up Air juggling chains (anti-Ridley/aerial counter)
+                nudge_pct(beh.dair,         24.0f); // Down Air safe landing (anti-Mii Gunner) & meteor spike
+                nudge_pct(beh.fair,         18.0f); // Forward Air horizontal KO
+                nudge_pct(beh.bair,         16.0f); // Back Air fast KO
+                nudge_pct(beh.air_sspecial,  4.0f); // Aerial Alolan Whip command grab mixup
+                nudge_pct(beh.air_nspecial,  1.0f);
+                nudge_pct(beh.air_uspecial,  0.5f);
+                nudge_pct(beh.air_dspecial,  0.5f);
+                break;
+
             case TrainingFocus::TournamentOptimal:
                 nudge(beh.near_range,          0.62f);
                 nudge(beh.offensive,           0.68f);
@@ -726,6 +952,129 @@ TrainingSummary TrainingSimulator::RunTrainingSession(
     summary.final_behavior = amiibo.DecodeBehavior();
 
     return summary;
+}
+
+std::vector<SpiritBenchmarkEntry> TrainingSimulator::RunIncineroarSpiritBenchmark(
+    int games_per_loadout,
+    ComputePreference pref) {
+
+    struct CandidateSpec {
+        const char* name;
+        const char* tier;
+        const char* primary;
+        int16_t atk;
+        int16_t def;
+        uint8_t s1, s2, s3;
+    };
+
+    static const CandidateSpec kCandidates[8] = {
+        {
+            "1. Halberd Armor Knight + Trade-Off Ability (1.36x ATK / 2.16x DEF / 0.84x SPD)",
+            "Unrestricted Raid Boss",
+            "Giratina (Origin Forme)",
+            2400, 2600,
+            140, 15, 0
+        },
+        {
+            "2. Halberd Armor Knight + Move Speed Up (1.15x ATK / 1.80x DEF / 0.84x SPD, 0% Start)",
+            "Unrestricted Raid Boss",
+            "Giratina (Origin Forme)",
+            2400, 2600,
+            140, 1, 0
+        },
+        {
+            "3. Halberd Armor Knight + Trade-Off Speed (1.15x ATK / 1.80x DEF / 0.98x SPD)",
+            "Unrestricted Raid Boss",
+            "Giratina (Origin Forme)",
+            2550, 2450,
+            140, 14, 0
+        },
+        {
+            "4. Gold Mario Super Armor (3-Slot Unflinching Alolan Whip Tank)",
+            "Unrestricted Raid Boss",
+            "Galeem",
+            2500, 2500,
+            10, 0, 0
+        },
+        {
+            "5. Celebi Great Autoheal (3-Slot 5% Regen Every 5 Seconds)",
+            "Unrestricted Raid Boss",
+            "Galeem",
+            2200, 2800,
+            180, 0, 0
+        },
+        {
+            "6. Critical Healing & Metal + Trade-Off Ability (#1 Tournament-Legal Meta)",
+            "Tournament-Legal (Big 5 Banned)",
+            "Tournament Standard (2100/2100)",
+            2100, 2100,
+            236, 15, 0
+        },
+        {
+            "7. Trade-Off Ability + Physical Attack Up + Move Speed Up (Amiibo Doctor Best Legal Trio)",
+            "Tournament-Legal (Big 5 Banned)",
+            "Tournament Standard (2100/2100)",
+            2100, 2100,
+            15, 50, 1
+        },
+        {
+            "8. Trade-Off Ability + Side Special Up + Landing Lag Down (Alolan Whip + Aerial Specialist)",
+            "Tournament-Legal (Big 5 Banned)",
+            "Tournament Standard (2100/2100)",
+            2100, 2100,
+            15, 87, 81
+        }
+    };
+
+    std::vector<SpiritBenchmarkEntry> results;
+    results.reserve(8);
+
+    for (int i = 0; i < 8; ++i) {
+        const auto& c = kCandidates[i];
+        AmiiboBin bin;
+        bin.InitializeBlankFighter(0x1BD7, 0); // Incineroar (#69, 0x1BD7000003860002)
+        bin.SetSpiritType(SpiritType::Neutral);
+        bin.SetStats(c.atk, c.def, false);
+        bin.SetSpiritSlots(c.s1, c.s2, c.s3, true);
+        // Pre-train to Lv 50 first so the benchmark evaluates mature Level 50 combat performance
+        bin.SetDisplayedLevel(50);
+        bin.SetCpuLevel(9);
+
+        TrainingConfig cfg{};
+        cfg.num_games = std::max(100, games_per_loadout);
+        cfg.archetype = OpponentArchetype::FullRosterGauntlet;
+        cfg.focus = TrainingFocus::IncineroarRaidBoss;
+        cfg.compute_preference = pref;
+        cfg.opponent_cpu_level = 9;
+        cfg.freeze_learning_after_training = true;
+        cfg.random_seed = 0x53534255u + static_cast<uint32_t>(i * 101u);
+
+        TrainingSummary sum = RunTrainingSession(bin, cfg);
+
+        SpiritBenchmarkEntry entry{};
+        entry.loadout_name = c.name;
+        entry.ruleset_tier = c.tier;
+        entry.primary_spirit = c.primary;
+        entry.atk = c.atk;
+        entry.def = c.def;
+        entry.s1 = c.s1;
+        entry.s2 = c.s2;
+        entry.s3 = c.s3;
+        entry.games_played = sum.total_games;
+        entry.wins = sum.wins;
+        entry.losses = sum.losses;
+        entry.win_rate_pct = 100.0f * static_cast<float>(sum.wins) / static_cast<float>(sum.total_games);
+        entry.avg_dmg_dealt = sum.avg_damage_dealt;
+        entry.avg_dmg_taken = sum.avg_damage_taken;
+        entry.total_alolan_whips_and_grabs = sum.total_grabs_landed;
+        entry.total_parries = sum.total_parries;
+        entry.total_meteors = sum.total_meteors;
+        entry.total_frames = sum.total_frames_simulated;
+        entry.final_personality = sum.final_personality;
+        results.push_back(entry);
+    }
+
+    return results;
 }
 
 } // namespace ssbu

@@ -35,23 +35,23 @@ const std::vector<SupportSpiritAbility>& GetSupportSpiritCatalog() {
         };
 
         set(0,   "None", 0, true, "Empty spirit slot");
-        set(1,   "Move Speed Up", 1, true, "Increases ground movement speed (L 1)");
-        set(2,   "Hyper Smash Attacks", 1, true, "Increases smash attack charge speed and damage (L 1)");
-        set(4,   "Jump Up", 1, true, "Increases jump height (L 1)");
+        set(1,   "Move Speed Up", 1, true, "Increases ground movement speed by 1.2x (L 1)");
+        set(2,   "Hyper Smash Attacks", 1, true, "Increases smash attack charge speed and damage by 1.1x (L 1)");
+        set(4,   "Jump Up", 1, true, "Increases jump height by 1.2x (L 1)");
         set(5,   "Additional Midair Jump", 2, true, "Grants an extra midair jump (L 2)");
         set(6,   "Lifesteal", 3, false, "Heals when dealing damage to opponents (U 3)");
         set(7,   "Defense Up", 1, false, "Increases defense stat multiplier");
         set(8,   "Easier Dodging", 1, true, "Increases dodge invincibility window (L 1)");
         set(9,   "Easier Perfect Shield", 1, true, "Widens parry timing window (L 1)");
-        set(10,  "Super Armor", 3, true, "Prevents flinching from weak and medium attacks (L 3)");
-        set(11,  "Slow Super Armor", 2, true, "Grants Super Armor at reduced movement speed (L 2)");
-        set(12,  "Trade-Off Attacks Up", 1, true, "Starts match with 30% damage and higher attack power (L 1)");
-        set(13,  "Trade-Off Defense Up", 1, true, "Starts match with 30% damage and higher defense (L 1)");
-        set(14,  "Trade-Off Speed Up", 1, true, "Starts match with 30% damage and higher speed (L 1)");
-        set(15,  "Trade-Off Ability Up", 1, true, "Starts match with 30% damage and boosted stats (L 1)");
-        set(16,  "Critical-Health Attack Up", 1, true, "Boosts attack power at high damage percent (L 1)");
-        set(17,  "Critical-Health Defense Up", 1, true, "Boosts defense at high damage percent (L 1)");
-        set(18,  "Critical-Health Stats Up", 1, true, "Boosts attack, defense, and speed at high percent (L 1)");
+        set(10,  "Super Armor", 3, true, "Prevents flinching from weak and medium attacks up to ~70% (L 3)");
+        set(11,  "Slow Super Armor", 2, true, "Grants Super Armor at 0.3x movement speed (L 2)");
+        set(12,  "Trade-Off Attacks Up", 1, true, "Starts match with 30% damage and 1.23x attack power (L 1)");
+        set(13,  "Trade-Off Defense Up", 1, true, "Starts match with 30% damage and 1.40x defense (L 1)");
+        set(14,  "Trade-Off Speed Up", 1, true, "Starts match with 30% damage and 1.40x speed (L 1)");
+        set(15,  "Trade-Off Ability Up", 1, true, "Starts match with 30% damage and 1.18x ATK / 1.20x DEF / 1.20x SPD (L 1)");
+        set(16,  "Critical-Health Attack Up", 1, true, "Boosts attack power by 1.1x at 80%+ damage (L 1)");
+        set(17,  "Critical-Health Defense Up", 1, true, "Boosts defense by 1.3x at 80%+ damage (L 1)");
+        set(18,  "Critical-Health Stats Up", 1, true, "Boosts 1.1x ATK, 1.3x DEF, and 1.3x SPD at 80%+ damage (L 1)");
         set(19,  "Critical Immunity", 2, true, "Grants brief invincibility when reaching critical health (L 2)");
         set(20,  "Autoheal", 2, true, "Recovers 3% damage every 5 seconds (L 2)");
         set(21,  "Poison Immunity", 2, true, "Negates poison floor hazards (L 2)");
@@ -81,7 +81,7 @@ const std::vector<SupportSpiritAbility>& GetSupportSpiritCatalog() {
         set(46,  "Freezie Equipped", 1, true, "Starts match holding a Freezie (L 1)");
         set(47,  "Ramblin' Evil Mushroom Equipped", 1, true, "Starts match holding a Ramblin' Evil Mushroom (L 1)");
         set(48,  "Killing Edge Equipped", 1, true, "Starts match holding a Killing Edge (L 1)");
-        set(50,  "Physical Attack Up", 1, true, "Increases punch, kick, and bite damage by 1.1x (L 1)");
+        set(50,  "Physical Attack Up", 1, true, "Increases punch, kick, bite, and throw damage by 1.1x (L 1)");
         set(51,  "Weapon Attack Up", 1, true, "Increases sword, hammer, and weapon damage by 1.1x (L 1)");
         set(52,  "Fist Attack Up", 1, true, "Increases punch and elbow attack damage by 1.1x (L 1)");
         set(53,  "Foot Attack Up", 1, true, "Increases kick and knee attack damage by 1.1x (L 1)");
@@ -106,15 +106,15 @@ const std::vector<SupportSpiritAbility>& GetSupportSpiritCatalog() {
         set(78,  "Bury Immunity", 1, true, "Prevents being buried in the ground (L 1)");
         set(79,  "Braking Ability Up", 1, true, "Increases ground traction and stopping speed (L 1)");
         set(80,  "Mobility Up", 1, false, "Boosts overall air and ground mobility");
-        set(81,  "Landing Lag Down", 1, true, "Reduces landing lag on aerial attacks (L 1)");
+        set(81,  "Landing Lag Down", 1, true, "Reduces landing lag on aerial attacks by 0.7x (L 1)");
         set(82,  "Lightweight", 1, true, "Increases mobility and jump height while reducing weight (L 1)");
         set(83,  "Shield Damage Up", 1, true, "Deals extra damage to opponent shields (L 1)");
-        set(84,  "Air Attack Up", 1, true, "Increases aerial attack damage (L 1)");
-        set(85,  "Air Defense Up", 1, true, "Reduces damage taken while airborne (L 1)");
-        set(86,  "Neutral Special Up", 1, true, "Increases neutral special damage (L 1)");
-        set(87,  "Side Special Up", 1, true, "Increases side special damage (L 1)");
-        set(88,  "Up Special Up", 1, true, "Increases up special damage (L 1)");
-        set(89,  "Down Special Up", 1, true, "Increases down special damage (L 1)");
+        set(84,  "Air Attack Up", 1, true, "Increases aerial attack damage by 1.1x (L 1)");
+        set(85,  "Air Defense Up", 1, true, "Reduces damage taken while airborne by 1.1x (L 1)");
+        set(86,  "Neutral Special Up", 1, true, "Increases neutral special damage by 1.1x (L 1)");
+        set(87,  "Side Special Up", 1, true, "Increases side special (e.g. Alolan Whip) damage by 1.1x (L 1)");
+        set(88,  "Up Special Up", 1, true, "Increases up special damage by 1.1x (L 1)");
+        set(89,  "Down Special Up", 1, true, "Increases down special damage by 1.1x (L 1)");
         set(90,  "Strong Throw", 1, true, "Increases throw damage and knockback (L 1)");
         set(91,  "Unflinching Charged Smashes", 2, true, "Grants super armor while charging smash attacks (L 2)");
         set(92,  "Toss & Meteor", 1, true, "Increases up-throw and meteor smash power (L 1)");
@@ -133,7 +133,7 @@ const std::vector<SupportSpiritAbility>& GetSupportSpiritCatalog() {
         set(112, "Fast Final Smash Meter", 2, true, "Charges Final Smash meter faster (L 2)");
         set(113, "Instadrop", 2, true, "Enables damaging fast-fall drop (L 2)");
         set(114, "Healing Shield", 2, true, "Heals fighter when shielding attacks (L 2)");
-        set(117, "Floaty Jumps", 1, true, "Reduces gravity while jumping and falling (L 1)");
+        set(117, "Floaty Jumps", 1, true, "Reduces fall speed to 0.65x after jumping for superior recovery (L 1)");
         set(119, "Irreversible Controls", 2, true, "Prevents control-reversal status effects (L 2)");
         set(120, "Recovery Items Up", 1, false, "Increases healing received from recovery items");
         set(121, "Transformation Duration Up", 1, true, "Extends duration of fighter transformations and power-ups (L 1)");
@@ -149,7 +149,7 @@ const std::vector<SupportSpiritAbility>& GetSupportSpiritCatalog() {
         set(137, "Metal and Giant", 3, false, "Starts match both Metal and Giant");
         set(138, "Giant", 2, true, "Starts match as a Giant fighter (L 2)");
         set(139, "Dash Attack Up", 1, true, "Increases dash attack damage and speed (L 1)");
-        set(140, "Armor Knight", 2, true, "Greatly boosts defense and attack while reducing speed (L 2)");
+        set(140, "Armor Knight", 2, true, "Boosts 1.15x ATK and 1.80x DEF at 0.70x speed (L 2)");
         set(142, "Energy Shot Attack/Resistance Up", 2, true, "Boosts energy projectile damage and resistance (L 2)");
         set(143, "Hammer Duration Up", 1, true, "Extends duration of Hammer and Golden Hammer items (L 1)");
         set(144, "Boomerang Equipped", 1, true, "Starts match holding a Boomerang (L 1)");
@@ -177,9 +177,9 @@ const std::vector<SupportSpiritAbility>& GetSupportSpiritCatalog() {
         set(173, "Rocket Belt Equipped", 1, true, "Starts match wearing a Rocket Belt (L 1)");
         set(174, "Black Hole Equipped", 2, true, "Starts match holding a Black Hole (L 2)");
         set(176, "Stats Up Up after Eating", 2, true, "Greatly boosts all stats after eating food (L 2)");
-        set(178, "Critical-Health Stats Up Up", 2, true, "Greatly boosts attack, defense, and speed at high percent (L 2)");
+        set(178, "Critical-Health Stats Up Up", 2, true, "Boosts 1.18x ATK, 1.38x DEF, and 1.40x SPD at critical health (L 2)");
         set(179, "Critical Hit Up Up", 2, true, "Grants a 12% chance to deal 2x damage (L 2)");
-        set(180, "Great Autoheal", 3, true, "Recovers 5% damage every 3 seconds (L 3)");
+        set(180, "Great Autoheal", 3, true, "Recovers 5% damage every 5 seconds (L 3)");
         set(181, "Steel Diver Equipped", 2, true, "Starts match holding a Steel Diver (L 2)");
         set(182, "Banana Gun Equipped", 1, true, "Starts match holding a Banana Gun (L 1)");
         set(183, "Rage Blaster Equipped", 1, true, "Starts match holding a Rage Blaster (L 1)");
@@ -271,6 +271,8 @@ const SupportSpiritAbility* FindSupportAbilityByName(const std::string& query) {
 const std::vector<PrimarySpiritPreset>& GetPrimarySpiritCatalog() {
     static const std::vector<PrimarySpiritPreset> kPrimary = {
         {0,    "No Spirit (Vanilla 0 / 0)",      SpiritType::Neutral, 0,    0,    3, "None",     "Super Smash Bros."},
+        {487,  "Giratina (Origin Forme)",        SpiritType::Neutral, 2550, 2450, 3, "Legend",   "Pokemon"},
+        {1300, "Tournament Standard (2100/2100)",SpiritType::Neutral, 2100, 2100, 3, "Legend",   "Super Smash Bros."},
         {1297, "Galeem",                         SpiritType::Neutral, 2500, 2500, 3, "Legend",   "Super Smash Bros."},
         {1298, "Dharkon",                        SpiritType::Neutral, 2500, 2500, 3, "Legend",   "Super Smash Bros."},
         {1302, "Tabuu",                          SpiritType::Neutral, 2650, 2350, 3, "Legend",   "Super Smash Bros."},

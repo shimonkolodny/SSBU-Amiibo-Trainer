@@ -24,7 +24,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow);
 namespace {
 
 void PrintUsage(const char* prog) {
-    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.5 (Switch-Verified + 60 FPS GPU Sim)\n"
+    std::cout << "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.6 (Switch-Verified + 60 FPS GPU Sim)\n"
               << "Usage:\n"
               << "  " << prog << " --gui                        Launch native Windows GUI (default on Windows)\n"
               << "  " << prog << " [options]                    Run headless CLI training & spirit customization\n\n"
@@ -36,18 +36,20 @@ void PrintUsage(const char* prog) {
               << "  --mii-name <owner>           Set paired Owner Mii Name (up to 10 UTF-16LE chars, default: SwitchMii)\n"
               << "  --backend <auto|gpu|cpu>     Compute backend preference (default: auto = GPU First -> CPU Fallback)\n"
               << "  --gpu-info                   Probe and print GPU compute device capabilities\n"
-              << "  --fighter <id_or_name>       Amiibo fighter ID (e.g. 0x0000) or name (e.g. \"Mario\", \"Kazuya\")\n"
+              << "  --fighter <id_or_name>       Amiibo fighter ID (e.g. 0x1BD7) or name (e.g. \"Incineroar\", \"Sephiroth\")\n"
               << "  --opponent <id_or_name>      Sparring opponent fighter ID or name (default: Fox)\n"
               << "  --games <N>                  Number of 60 FPS matches to simulate (default: 500)\n"
               << "  --archetype <name>           gauntlet | balanced | rushdown | zoner | parry | grappler | aerial\n"
-              << "  --focus <name>               optimal | aggressive | parry | aerial | showoff | adaptive | heavy\n"
-              << "  --primary-spirit <name>      Equip Primary Spirit preset by name\n"
+              << "  --focus <name>               incineroar | optimal | aggressive | parry | aerial | showoff | adaptive | heavy\n"
+              << "  --primary-spirit <name>      Equip Primary Spirit preset by name (e.g. \"Giratina (Origin Forme)\")\n"
               << "  --attack <val>               Explicit Primary Spirit Attack stat (-2000..5000)\n"
               << "  --defense <val>              Explicit Primary Spirit Defense stat (-2000..5000)\n"
               << "  --spirits <id1,id2,id3>      Comma-separated Support Spirit Ability IDs (0..254)\n"
+              << "  --benchmark-incineroar [N]   Run 8-Loadout Incineroar Spirit Tournament Benchmark (N games/loadout, default: 1000)\n"
               << "  --list-spirits [query]       Search or list Support Spirits in SSBU\n"
               << "  --list-primaries             List Primary Spirit presets\n"
-              << "  --list-fighters              List all 89 SSBU playable fighters & character IDs\n"
+              << "  --list-fighters              List all 91 SSBU playable fighters & canonical 64-bit Amiibo IDs\n"
+              << "  --shuffle-uid                Generate a fresh, unique 7-byte NTAG215 Serial UID & 32-byte salt\n"
               << "  --inspect                    Print detailed Amiibo & Switch nn::nfp diagnostic report\n";
 }
 
@@ -69,6 +71,7 @@ ssbu::OpponentArchetype ParseArchetype(const std::string& s) {
 }
 
 ssbu::TrainingFocus ParseFocus(const std::string& s) {
+    if (s == "incineroar" || s == "endeavor" || s == "raidboss") return ssbu::TrainingFocus::IncineroarRaidBoss;
     if (s == "optimal" || s == "balanced") return ssbu::TrainingFocus::TournamentOptimal;
     if (s == "aggressive" || s == "rushdown") return ssbu::TrainingFocus::AggressiveStageControl;
     if (s == "parry" || s == "defensive") return ssbu::TrainingFocus::ParryAndPunishMaster;
@@ -94,6 +97,7 @@ void PrintDiagnosticSummary(const ssbu::AmiiboBin& bin) {
     std::cout << "=== SSBU Amiibo Diagnostic Summary ===\n"
               << "  Switch nn::nfp  : " << switch_diag << "\n"
               << "  Format Status   : " << bin.GetFormatStatusString() << "\n"
+              << "  NTAG215 Serial  : UID " << bin.GetUidHexString() << " (Unique Per-Tag Serial + Salt)\n"
               << "  Owner Mii       : " << (bin.HasOwnerMii() ? "AUTO-PAIRED & VER3 VALID" : "UNREGISTERED")
               << " (Owner: \"" << bin.GetOwnerMiiName() << "\" | Nickname: \"" << bin.GetAmiiboNickname()
               << "\" | CRC-16: 0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
@@ -114,6 +118,16 @@ void PrintDiagnosticSummary(const ssbu::AmiiboBin& bin) {
         std::cout << "  Support Slot " << (i + 1) << "  : [" << static_cast<int>(slots[i]) << "] "
                   << (ab ? ab->name : "None") << " (" << (ab ? static_cast<int>(ab->slot_cost) : 0) << "-Slot)\n";
     }
+    auto bp = bin.DecodeBehavior();
+    std::cout << std::fixed << std::setprecision(1)
+              << "  Core AI Weights : Grounded " << (bp.grounded * 100.0f) << "% | NearRange " << (bp.near_range * 100.0f)
+              << "% | Offense " << (bp.offensive * 100.0f) << "% | Parry " << (bp.just_shield_master * 100.0f)
+              << "% | Catcher " << (bp.catcher * 100.0f) << "% | Recovery " << (bp.return_to_cliff * 100.0f) << "%\n"
+              << "  Grounded Moves  : SideB(AlolanWhip) " << bp.sspecial << "% | DSmash " << bp.dsmash
+              << "% | FSmash " << bp.fsmash << "% | USmash " << bp.usmash << "% | DTilt " << bp.dtilt
+              << "% | FTilt " << bp.ftilt << "%\n"
+              << "  Aerial Moves    : Uair " << bp.uair << "% | Dair " << bp.dair
+              << "% | Fair " << bp.fair << "% | Bair " << bp.bair << "% | Nair " << bp.ImplicitNairPercent() << "%\n";
 }
 
 } // namespace
@@ -143,6 +157,9 @@ int main(int argc, char** argv) {
     int custom_def = -99999;
     std::string spirits_csv;
     bool inspect_only = false;
+    bool shuffle_uid = false;
+    bool run_incineroar_benchmark = false;
+    int benchmark_games_per_loadout = 1000;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -158,12 +175,18 @@ int main(int argc, char** argv) {
                       << "  Adapter Name    : " << info.adapter_name << "\n"
                       << "  Dedicated VRAM  : " << info.dedicated_vram_mb << " MB\n";
             return 0;
+        } else if (arg == "--benchmark-incineroar") {
+            run_incineroar_benchmark = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                benchmark_games_per_loadout = std::max(100, std::atoi(argv[++i]));
+            }
         } else if (arg == "--list-fighters") {
             std::cout << "=== Super Smash Bros. Ultimate Complete Fighter Roster ("
                       << ssbu::GetFighterCatalog().size() << " Fighters) ===\n";
             for (const auto& f : ssbu::GetFighterCatalog()) {
                 std::cout << "  0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
-                          << f.char_id << std::dec << " (#" << std::setw(3) << std::setfill(' ') << f.roster_num
+                          << f.char_id << " (AmiiboID 0x" << std::setw(16) << f.amiibo_id << ")"
+                          << std::dec << " (#" << std::setw(3) << std::setfill(' ') << f.roster_num
                           << ") : " << f.name << "\n";
             }
             return 0;
@@ -225,9 +248,40 @@ int main(int argc, char** argv) {
             spirits_csv = argv[++i];
         } else if (arg == "--inspect") {
             inspect_only = true;
+        } else if (arg == "--shuffle-uid") {
+            shuffle_uid = true;
         }
     }
 
+    if (run_incineroar_benchmark) {
+        std::cout << "=== SSBU Incineroar 8-Loadout Spirit & Matchup Tournament Benchmark ("
+                  << benchmark_games_per_loadout << " 60 FPS Games / Loadout = "
+                  << (benchmark_games_per_loadout * 8) << " Total Matches) ===\n";
+        auto entries = ssbu::TrainingSimulator::RunIncineroarSpiritBenchmark(
+            benchmark_games_per_loadout, ParseBackendPref(backend_str));
+        uint64_t grand_total_frames = 0;
+        for (const auto& e : entries) {
+            grand_total_frames += e.total_frames;
+            std::cout << "\n[" << e.ruleset_tier << "] " << e.loadout_name << "\n"
+                      << "  Primary Spirit  : " << e.primary_spirit << " (ATK " << e.atk << " / DEF " << e.def << ")\n"
+                      << "  Support IDs     : [" << int(e.s1) << ", " << int(e.s2) << ", " << int(e.s3) << "]\n"
+                      << "  Record (W - L)  : " << e.wins << "W - " << e.losses << "L ("
+                      << std::fixed << std::setprecision(2) << e.win_rate_pct << "% Win Rate across "
+                      << e.total_frames << " 60Hz frames)\n"
+                      << "  Damage Profile  : " << std::setprecision(1) << e.avg_dmg_dealt << "% Avg Dealt vs. "
+                      << e.avg_dmg_taken << "% Avg Taken (Net Ratio: "
+                      << std::setprecision(2) << (e.avg_dmg_dealt / std::max(1.0f, e.avg_dmg_taken)) << "x)\n"
+                      << "  Combat Metrics  : " << e.total_alolan_whips_and_grabs << " Alolan Whips/Grabs | "
+                      << e.total_parries << " Parries | " << e.total_meteors << " Dair Meteors | Style: "
+                      << e.final_personality << "\n";
+        }
+        std::cout << "\nTotal 60 FPS Frames Simulated Across 8 Incineroar Spirit Loadouts: " << grand_total_frames << "\n";
+        if (out_path.empty()) return 0;
+    }
+
+    if (!explicit_fighter && ParseFocus(focus_str) == ssbu::TrainingFocus::IncineroarRaidBoss) {
+        fighter_arg = "Incineroar";
+    }
     uint16_t char_id = ResolveFighterArg(fighter_arg);
     uint16_t opp_id = ResolveFighterArg(opponent_arg);
 
@@ -254,6 +308,9 @@ int main(int argc, char** argv) {
         }
     }
 
+    if (shuffle_uid) {
+        bin.RandomizeUidAndSalt();
+    }
     if (!mii_name_arg.empty()) {
         bin.SetOwnerMiiName(mii_name_arg);
     }
@@ -314,7 +371,7 @@ int main(int argc, char** argv) {
                   << "Win / Loss      : " << sum.wins << "W - " << sum.losses << "L ("
                   << std::fixed << std::setprecision(1) << win_rate << "%)\n"
                   << "Combat Stats    : " << sum.total_hits_landed << " Hits | "
-                  << sum.total_grabs_landed << " Grabs | " << sum.total_parries << " Parries | "
+                  << sum.total_grabs_landed << " Grabs/CommandGrabs | " << sum.total_parries << " Parries | "
                   << sum.total_meteors << " Meteors | " << sum.total_ledge_recoveries << " Ledge Recs\n"
                   << "Level Progress  : Lv " << sum.initial_level
                   << " -> Lv " << sum.final_level << "\n"
