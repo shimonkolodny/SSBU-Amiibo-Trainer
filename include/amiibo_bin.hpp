@@ -164,7 +164,7 @@ public:
 
     int16_t GetAttackStat() const;
     int16_t GetDefenseStat() const;
-    void SetStats(int16_t attack, int16_t defense, bool enforce_legal_cap = true);
+    void SetStats(int16_t attack, int16_t defense, bool enforce_legal_cap = false);
 
     std::array<uint8_t, 3> GetSpiritSlots() const;
     std::array<uint8_t, 3> GetLogicalSpiritList() const; // Normalized non-zero abilities

@@ -188,6 +188,14 @@ void TestBitfieldPackingAndStats() {
     assert(bin.GetDefenseStat() == 2350);
     assert(bin.GetSpiritType() == ssbu::SpiritType::Defense);
 
+    // Verify uncapped Spirit Attack & Defense beyond 5000 (up to full 16-bit int16_t max 32767 / 32767)
+    bin.SetStats(10000, 10000, true);
+    assert(bin.GetAttackStat() == 10000);
+    assert(bin.GetDefenseStat() == 10000);
+    bin.SetStats(32767, 32767, true);
+    assert(bin.GetAttackStat() == 32767);
+    assert(bin.GetDefenseStat() == 32767);
+
     std::string serr;
     bool bad_slots = bin.SetSpiritSlots(10, 20, 0, true, &serr);
     assert(!bad_slots);

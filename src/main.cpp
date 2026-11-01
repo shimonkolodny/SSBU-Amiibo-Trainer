@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -42,8 +43,8 @@ void PrintUsage(const char* prog) {
               << "  --archetype <name>           gauntlet | balanced | rushdown | zoner | parry | grappler | aerial\n"
               << "  --focus <name>               incineroar | optimal | aggressive | parry | aerial | showoff | adaptive | heavy\n"
               << "  --primary-spirit <name>      Equip Primary Spirit preset by name (e.g. \"Giratina (Origin Forme)\")\n"
-              << "  --attack <val>               Explicit Primary Spirit Attack stat (-2000..5000)\n"
-              << "  --defense <val>              Explicit Primary Spirit Defense stat (-2000..5000)\n"
+              << "  --attack <val>               Explicit Primary Spirit Attack stat (Uncapped, up to 32767)\n"
+              << "  --defense <val>              Explicit Primary Spirit Defense stat (Uncapped, up to 32767)\n"
               << "  --spirits <id1,id2,id3>      Comma-separated Support Spirit Ability IDs (0..254)\n"
               << "  --benchmark-incineroar [N]   Run 8-Loadout Incineroar Spirit Tournament Benchmark (N games/loadout, default: 1000)\n"
               << "  --list-spirits [query]       Search or list Support Spirits in SSBU\n"
@@ -196,8 +197,8 @@ int main(int argc, char** argv) {
             for (const auto& p : ssbu::GetPrimarySpiritCatalog()) {
                 std::cout << "  " << std::setw(34) << std::left << p.name
                           << " | Rank: " << std::setw(8) << p.rank
-                          << " | ATK: " << std::setw(4) << p.base_attack
-                          << " | DEF: " << std::setw(4) << p.base_defense
+                          << " | ATK: " << std::setw(5) << p.base_attack
+                          << " | DEF: " << std::setw(5) << p.base_defense
                           << " | Slots: " << static_cast<int>(p.slots) << "\n";
             }
             return 0;
@@ -331,8 +332,12 @@ int main(int argc, char** argv) {
     }
 
     if (custom_atk != -99999 || custom_def != -99999) {
-        int16_t a = (custom_atk != -99999) ? static_cast<int16_t>(custom_atk) : bin.GetAttackStat();
-        int16_t d = (custom_def != -99999) ? static_cast<int16_t>(custom_def) : bin.GetDefenseStat();
+        int16_t a = (custom_atk != -99999)
+            ? static_cast<int16_t>(std::clamp<int>(custom_atk, -32768, 32767))
+            : bin.GetAttackStat();
+        int16_t d = (custom_def != -99999)
+            ? static_cast<int16_t>(std::clamp<int>(custom_def, -32768, 32767))
+            : bin.GetDefenseStat();
         bin.SetStats(a, d, false);
     }
 
