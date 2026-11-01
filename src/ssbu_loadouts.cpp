@@ -270,7 +270,9 @@ const SupportSpiritAbility* FindSupportAbilityByName(const std::string& query) {
 // Comprehensive SSBU Primary Spirit Collection (Neutral, Attack, Defense, Grab across Legend/Ace/Advanced/Novice)
 const std::vector<PrimarySpiritPreset>& GetPrimarySpiritCatalog() {
     static const std::vector<PrimarySpiritPreset> kPrimary = {
-        {0,    "No Spirit (Vanilla 0 / 0)",      SpiritType::Neutral, 0,    0,    3, "None",     "Super Smash Bros."},
+        {0,    "No Spirit (Vanilla 0 / 0)",      SpiritType::Neutral, 0,     0,     3, "None",     "Super Smash Bros."},
+        {9999, "Max Uncapped Power (32767/32767)",SpiritType::Neutral, 32767, 32767, 3, "Uncapped", "Super Smash Bros."},
+        {9998, "Overlimit Raid Boss (5000/5000)", SpiritType::Neutral, 5000,  5000,  3, "Uncapped", "Super Smash Bros."},
         {487,  "Giratina (Origin Forme)",        SpiritType::Neutral, 2550, 2450, 3, "Legend",   "Pokemon"},
         {1300, "Tournament Standard (2100/2100)",SpiritType::Neutral, 2100, 2100, 3, "Legend",   "Super Smash Bros."},
         {1297, "Galeem",                         SpiritType::Neutral, 2500, 2500, 3, "Legend",   "Super Smash Bros."},

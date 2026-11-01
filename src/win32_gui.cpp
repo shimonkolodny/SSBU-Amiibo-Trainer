@@ -53,6 +53,7 @@ enum ControlId {
     ID_BTN_STAT_VANILLA = 131,
     ID_BTN_APPLY_SPIRITS = 132,
     ID_LBL_SLOT_METER = 133,
+    ID_BTN_STAT_MAX = 134,
 
     ID_CMB_OPPONENT = 140,
     ID_CMB_ARCHETYPE = 141,
@@ -402,9 +403,9 @@ static void ApplySelectedFighterAndSpirits(HWND hwnd) {
     char atk_buf[32] = {0}, def_buf[32] = {0};
     GetWindowTextA(g_app.hwnd_atk, atk_buf, sizeof(atk_buf));
     GetWindowTextA(g_app.hwnd_def, def_buf, sizeof(def_buf));
-    int atk = std::clamp(std::atoi(atk_buf), -2000, 5000);
-    int def = std::clamp(std::atoi(def_buf), -2000, 5000);
-    g_app.bin.SetStats(static_cast<int16_t>(atk), static_cast<int16_t>(def), false);
+    long long atk_ll = std::clamp<long long>(std::strtoll(atk_buf, nullptr, 10), -32768LL, 32767LL);
+    long long def_ll = std::clamp<long long>(std::strtoll(def_buf, nullptr, 10), -32768LL, 32767LL);
+    g_app.bin.SetStats(static_cast<int16_t>(atk_ll), static_cast<int16_t>(def_ll), false);
 
     uint8_t s1 = GetSelectedSupportSpiritId(g_app.hwnd_sup1);
     uint8_t s2 = GetSelectedSupportSpiritId(g_app.hwnd_sup2);
@@ -501,20 +502,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             g_app.hwnd_primary = CreateWindowA("COMBOBOX", "", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL,
                 125, 182, 368, 320, hwnd, reinterpret_cast<HMENU>(ID_CMB_PRIMARY_SPIRIT), nullptr, nullptr);
 
-            CreateWindowA("STATIC", "ATK / DEF:", WS_VISIBLE | WS_CHILD, 26, 214, 80, 20, hwnd, nullptr, nullptr, nullptr);
-            g_app.hwnd_atk = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                105, 211, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_ATK), nullptr, nullptr);
-            g_app.hwnd_def = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER,
-                166, 211, 56, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_DEF), nullptr, nullptr);
+            CreateWindowA("STATIC", "ATK / DEF:", WS_VISIBLE | WS_CHILD, 26, 214, 72, 20, hwnd, nullptr, nullptr, nullptr);
+            g_app.hwnd_atk = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+                100, 211, 52, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_ATK), nullptr, nullptr);
+            g_app.hwnd_def = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+                156, 211, 52, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_DEF), nullptr, nullptr);
 
             CreateWindowA("BUTTON", "2500/2500", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                228, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_BALANCED), nullptr, nullptr);
+                212, 210, 62, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_BALANCED), nullptr, nullptr);
             CreateWindowA("BUTTON", "3200/1800", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                299, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_AGGRO), nullptr, nullptr);
+                276, 210, 62, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_AGGRO), nullptr, nullptr);
             CreateWindowA("BUTTON", "1800/3200", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                370, 210, 68, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_TANK), nullptr, nullptr);
+                340, 210, 62, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_TANK), nullptr, nullptr);
+            CreateWindowA("BUTTON", "MAX", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+                404, 210, 48, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_MAX), nullptr, nullptr);
             CreateWindowA("BUTTON", "0/0", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                441, 210, 52, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_VANILLA), nullptr, nullptr);
+                454, 210, 39, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_STAT_VANILLA), nullptr, nullptr);
 
             CreateWindowA("STATIC", "Filter Supports:", WS_VISIBLE | WS_CHILD, 26, 244, 95, 20, hwnd, nullptr, nullptr, nullptr);
             g_app.hwnd_spirit_search = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
@@ -738,6 +741,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             } else if (id == ID_BTN_STAT_TANK) {
                 SetWindowTextA(g_app.hwnd_atk, "1800");
                 SetWindowTextA(g_app.hwnd_def, "3200");
+            } else if (id == ID_BTN_STAT_MAX) {
+                SetWindowTextA(g_app.hwnd_atk, "32767");
+                SetWindowTextA(g_app.hwnd_def, "32767");
             } else if (id == ID_BTN_STAT_VANILLA) {
                 SetWindowTextA(g_app.hwnd_atk, "0");
                 SetWindowTextA(g_app.hwnd_def, "0");
