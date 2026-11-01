@@ -30,29 +30,35 @@ jobs:
         working-directory: build
         run: ctest -C Release --output-on-failure --verbose
 
-      - name: Run End-to-End GPU-First CLI Training Verification (500 Games + Spirits)
+      - name: Run 8-Loadout Incineroar Spirit Benchmark & Train Championship Amiibo (.bin)
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
             ./build/Release/ssbu_amiibo_trainer.exe --gpu-info
+            ./build/Release/ssbu_amiibo_trainer.exe --benchmark-incineroar 1000
+            ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Incineroar" --nickname "Endeavor" --archetype gauntlet --focus incineroar --games 5000 --primary-spirit "Giratina (Origin Forme)" --attack 2400 --defense 2600 --spirits 140,15,0 --out trained_incineroar_lv50_raid_boss.bin
+            ./build/Release/ssbu_amiibo_trainer.exe --in trained_incineroar_lv50_raid_boss.bin --inspect
+            ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Incineroar" --nickname "Endeavor" --archetype gauntlet --focus incineroar --games 2500 --primary-spirit "Tournament Standard (2100/2100)" --attack 2100 --defense 2100 --spirits 15,50,1 --out trained_incineroar_lv50_tournament_legal.bin
+            ./build/Release/ssbu_amiibo_trainer.exe --in trained_incineroar_lv50_tournament_legal.bin --inspect
             ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Sephiroth" --opponent "Kazuya" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
-            ./build/Release/ssbu_amiibo_trainer.exe --in trained_sephiroth_lv50.bin --inspect
             ./build/Release/ssbu_amiibo_trainer.exe --backend auto --fighter "Mario" --opponent "Fox" --games 500 --archetype balanced --focus optimal --primary-spirit "Galeem" --spirits 20,81,0 --out trained_mario_lv50.bin
-            ./build/Release/ssbu_amiibo_trainer.exe --in trained_mario_lv50.bin --inspect
           else
             ./build/ssbu_amiibo_trainer --gpu-info
-            ./build/ssbu_amiibo_trainer --backend auto --fighter "Sephiroth" --opponent "Kazuya" --games 500 --archetype aerial --focus aerial --primary-spirit "Galeem" --spirits 20,81,0 --out trained_sephiroth_lv50.bin
-            ./build/ssbu_amiibo_trainer --in trained_sephiroth_lv50.bin --inspect
-            ./build/ssbu_amiibo_trainer --backend auto --fighter "Mario" --opponent "Fox" --games 500 --archetype balanced --focus optimal --primary-spirit "Galeem" --spirits 20,81,0 --out trained_mario_lv50.bin
-            ./build/ssbu_amiibo_trainer --in trained_mario_lv50.bin --inspect
+            ./build/ssbu_amiibo_trainer --benchmark-incineroar 1000
+            ./build/ssbu_amiibo_trainer --backend auto --fighter "Incineroar" --nickname "Endeavor" --archetype gauntlet --focus incineroar --games 5000 --primary-spirit "Giratina (Origin Forme)" --attack 2400 --defense 2600 --spirits 140,15,0 --out trained_incineroar_lv50_raid_boss.bin
+            ./build/ssbu_amiibo_trainer --in trained_incineroar_lv50_raid_boss.bin --inspect
+            ./build/ssbu_amiibo_trainer --backend auto --fighter "Incineroar" --nickname "Endeavor" --archetype gauntlet --focus incineroar --games 2500 --primary-spirit "Tournament Standard (2100/2100)" --attack 2100 --defense 2100 --spirits 15,50,1 --out trained_incineroar_lv50_tournament_legal.bin
+            ./build/ssbu_amiibo_trainer --in trained_incineroar_lv50_tournament_legal.bin --inspect
           fi
         shell: bash
 
-      - name: Upload Windows Executable & Sample Trained Amiibo Artifact
+      - name: Upload Windows Executable & Championship Trained Amiibo Artifact
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: SSBU-Amiibo-Trainer-Windows-x64
           path: |
             build/Release/ssbu_amiibo_trainer.exe
+            trained_incineroar_lv50_raid_boss.bin
+            trained_incineroar_lv50_tournament_legal.bin
             trained_sephiroth_lv50.bin
             trained_mario_lv50.bin

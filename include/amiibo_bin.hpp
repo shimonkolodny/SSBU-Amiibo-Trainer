@@ -103,6 +103,8 @@ public:
     bool SaveToFile(const std::string& path, std::string* error_out = nullptr);
 
     void InitializeBlankFighter(uint16_t char_id, uint8_t skin = 0);
+    void RandomizeUidAndSalt();
+    std::string GetUidHexString() const;
 
     // Owner Mii & Amiibo Nickname Auto-Pairing (0x02C..0x0AB in Internal Layout)
     bool HasOwnerMii() const;

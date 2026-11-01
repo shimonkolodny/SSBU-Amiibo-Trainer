@@ -25,7 +25,8 @@ enum class TrainingFocus {
     AerialMeteorEdgeguarder,
     ShowOffEntertainer,
     AdaptiveCounterplay,
-    HeavyArmorSmashBrawler
+    HeavyArmorSmashBrawler,
+    IncineroarRaidBoss
 };
 
 struct TrainingConfig {
@@ -84,6 +85,29 @@ struct TrainingSummary {
     std::vector<MatchResult> sample_matches;
 };
 
+struct SpiritBenchmarkEntry {
+    std::string loadout_name;
+    std::string ruleset_tier; // "Unrestricted Raid Boss" or "Tournament-Legal"
+    std::string primary_spirit;
+    int16_t atk = 0;
+    int16_t def = 0;
+    uint8_t s1 = 0;
+    uint8_t s2 = 0;
+    uint8_t s3 = 0;
+    int games_played = 0;
+    int wins = 0;
+    int losses = 0;
+    float win_rate_pct = 0.0f;
+    float avg_dmg_dealt = 0.0f;
+    float avg_dmg_taken = 0.0f;
+    float avg_stocks_remaining = 0.0f;
+    int total_alolan_whips_and_grabs = 0;
+    int total_parries = 0;
+    int total_meteors = 0;
+    uint64_t total_frames = 0;
+    std::string final_personality;
+};
+
 using ProgressCallback = std::function<void(int completed_games, int total_games, float rolling_win_rate)>;
 
 class TrainingSimulator {
@@ -92,6 +116,10 @@ public:
         AmiiboBin& amiibo,
         const TrainingConfig& config,
         ProgressCallback on_progress = nullptr);
+
+    static std::vector<SpiritBenchmarkEntry> RunIncineroarSpiritBenchmark(
+        int games_per_loadout = 1000,
+        ComputePreference pref = ComputePreference::GpuFirstAuto);
 
     static const char* ArchetypeToString(OpponentArchetype a);
     static const char* FocusToString(TrainingFocus f);

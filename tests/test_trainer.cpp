@@ -1,3 +1,4 @@
+#include <set>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -22,13 +23,19 @@ void TestSpiritCatalogAndRoster() {
     assert(ssbu::FindSupportAbilityById(1)->slot_cost == 1);
     assert(std::string(ssbu::FindSupportAbilityById(10)->name) == "Super Armor");
     assert(ssbu::FindSupportAbilityById(10)->slot_cost == 3);
+    assert(std::string(ssbu::FindSupportAbilityById(15)->name) == "Trade-Off Ability Up");
+    assert(ssbu::FindSupportAbilityById(15)->slot_cost == 1);
     assert(std::string(ssbu::FindSupportAbilityById(20)->name) == "Autoheal");
     assert(ssbu::FindSupportAbilityById(20)->slot_cost == 2);
     assert(std::string(ssbu::FindSupportAbilityById(81)->name) == "Landing Lag Down");
     assert(ssbu::FindSupportAbilityById(81)->slot_cost == 1);
+    assert(std::string(ssbu::FindSupportAbilityById(87)->name) == "Side Special Up");
+    assert(ssbu::FindSupportAbilityById(87)->slot_cost == 1);
     assert(std::string(ssbu::FindSupportAbilityById(140)->name) == "Armor Knight");
+    assert(ssbu::FindSupportAbilityById(140)->slot_cost == 2);
     assert(std::string(ssbu::FindSupportAbilityById(162)->name) == "Critical-Health Healing");
     assert(std::string(ssbu::FindSupportAbilityById(180)->name) == "Great Autoheal");
+    assert(std::string(ssbu::FindSupportAbilityById(236)->name) == "Critical Healing & Metal");
 
     auto selectable = ssbu::GetSelectableSupportSpirits(false, "");
     assert(selectable.size() > 140 && selectable.size() < 255);
@@ -42,10 +49,13 @@ void TestSpiritCatalogAndRoster() {
 
     const auto& primaries = ssbu::GetPrimarySpiritCatalog();
     assert(primaries.size() >= 60);
+    assert(ssbu::FindPrimarySpiritByName("Giratina (Origin Forme)") != nullptr);
 
     const auto& roster = ssbu::GetFighterCatalog();
     assert(roster.size() >= 91);
     assert(ssbu::FindFighterByName("Mario") != nullptr);
+    assert(ssbu::FindFighterByName("Incineroar") != nullptr);
+    assert(ssbu::FindFighterByName("Incineroar")->amiibo_id == 0x1BD7000003860002ULL);
     assert(ssbu::FindFighterByName("Sora") != nullptr);
     assert(ssbu::FindFighterByName("Kazuya") != nullptr);
     assert(ssbu::FindFighterByName("Sephiroth") != nullptr);
@@ -61,6 +71,18 @@ void TestSpiritCatalogAndRoster() {
         assert(bin.GetCharacterId() == f.char_id);
         assert(bin.GetAmiiboId() == f.amiibo_id);
         assert(bin.VerifySwitchCompatibility());
+    }
+
+    // Verify 100 generated Amiibo across the roster have 100% unique NTAG215 7-byte UIDs and never match legacy static UID
+    std::set<std::string> seen_uids;
+    for (int i = 0; i < 100; ++i) {
+        ssbu::AmiiboBin unique_bin;
+        unique_bin.InitializeBlankFighter(roster[i % roster.size()].char_id, 0);
+        std::string uid_str = unique_bin.GetUidHexString();
+        assert(uid_str != "04:A1:B2:D4:E5:F6:77");
+        assert(seen_uids.find(uid_str) == seen_uids.end());
+        seen_uids.insert(uid_str);
+        assert(unique_bin.VerifySwitchCompatibility());
     }
 
     std::cout << "[PASS] TestSpiritCatalogAndRoster (255 raw / " << selectable.size()
@@ -103,9 +125,11 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     // 4. Verify that saving and reloading without any external key_retail.bin produces an encrypted NTAG215 Tag file
     const std::string out_file = "test_switch_ready_kazuya.bin";
     std::string err;
-    assert(bin.SaveToFile(out_file, &err));
+    bool saved_ok = bin.SaveToFile(out_file, &err);
+    assert(saved_ok);
+    (void)saved_ok;
 
-    // Inspect raw disk bytes to verify Tag Layout (UID at 0x000, BCC0 at 0x003, BCC1 at 0x008, CC at 0x00C..0x00F, 0xA5 at 0x010, FigID 33C0000004200002 at 0x054..0x05B, PWD/PACK at 0x214..0x219)
+    // Inspect raw disk bytes to verify Tag Layout
     std::ifstream raw_in(out_file, std::ios::binary);
     std::vector<uint8_t> disk_tag(540, 0);
     raw_in.read(reinterpret_cast<char*>(disk_tag.data()), 540);
@@ -115,12 +139,10 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     assert(disk_tag[0x008] == (disk_tag[0x004] ^ disk_tag[0x005] ^ disk_tag[0x006] ^ disk_tag[0x007]));
     assert(disk_tag[0x00C] == 0xF1 && disk_tag[0x00D] == 0x10 && disk_tag[0x00E] == 0xFF && disk_tag[0x00F] == 0xEE);
     assert(disk_tag[0x010] == 0xA5);
-    // Verify canonical 8-byte Figure ID for Kazuya (33 C0 00 00 04 20 00 02) at tag[0x054..0x05B]
     assert(disk_tag[0x054] == 0x33 && disk_tag[0x055] == 0xC0 &&
            disk_tag[0x056] == 0x00 && disk_tag[0x057] == 0x00 &&
            disk_tag[0x058] == 0x04 && disk_tag[0x059] == 0x20 &&
            disk_tag[0x05A] == 0x00 && disk_tag[0x05B] == 0x02);
-    // Verify NTAG215 Page 133 PWD & Page 134 PACK (0x8080)
     assert(disk_tag[0x214] == (disk_tag[0x001] ^ disk_tag[0x004] ^ 0xAAu));
     assert(disk_tag[0x215] == (disk_tag[0x002] ^ disk_tag[0x005] ^ 0x55u));
     assert(disk_tag[0x216] == (disk_tag[0x004] ^ disk_tag[0x006] ^ 0xAAu));
@@ -130,10 +152,12 @@ void TestSwitchNfpCompatibilityAndAutoMii() {
     // 5. Verify that passing a corrupt external key_retail.bin is rejected and falls back to the canonical built-in retail key
     std::vector<uint8_t> corrupt_key(160, 0xAA);
     bin.SetRetailKeyBytes(corrupt_key);
-    assert(bin.VerifyRetailKeyHash()); // Must remain canonical built-in retail key
+    assert(bin.VerifyRetailKeyHash());
 
     ssbu::AmiiboBin reloaded;
-    assert(reloaded.LoadFromFile(out_file, &err));
+    bool loaded_ok = reloaded.LoadFromFile(out_file, &err);
+    assert(loaded_ok);
+    (void)loaded_ok;
     assert(reloaded.WasLoadedEncrypted());
     assert(reloaded.GetCharacterId() == 0x33C0);
     assert(reloaded.GetAmiiboId() == 0x33C0000004200002ULL);
@@ -167,9 +191,11 @@ void TestBitfieldPackingAndStats() {
     std::string serr;
     bool bad_slots = bin.SetSpiritSlots(10, 20, 0, true, &serr);
     assert(!bad_slots);
+    (void)bad_slots;
 
     bool good_slots = bin.SetSpiritSlots(20, 81, 0, true, &serr);
     assert(good_slots);
+    (void)good_slots;
     auto logical_slots = bin.GetLogicalSpiritList();
     assert(logical_slots[0] == 20);
     assert(logical_slots[1] == 81);
@@ -218,10 +244,12 @@ void TestNtag215TagConversionAndCryptoRoundTrip() {
     std::string err;
     bool saved = bin.SaveToFile(enc_file, &err);
     assert(saved);
+    (void)saved;
 
     ssbu::AmiiboBin reloaded;
     bool loaded = reloaded.LoadFromFile(enc_file, &err);
     assert(loaded);
+    (void)loaded;
     assert(reloaded.WasLoadedEncrypted());
     assert(reloaded.HasOwnerMii());
     assert(reloaded.VerifyOwnerMiiCrc16());
@@ -289,6 +317,7 @@ void TestGpuFirstComputeEngine() {
     std::string err;
     bool ok = ssbu::GpuComputeEngine::TryRunMatchBatchOnGpu(params, outcomes, &used_dev, &ms, &err);
     assert(ok);
+    (void)ok;
     assert(outcomes.size() == 256);
     assert(outcomes[0].frames_simulated > 100);
     assert(outcomes[0].hits_landed > 0);
@@ -317,7 +346,7 @@ void TestTrainingSimulation500Games60Fps() {
     assert(sum.total_games == 500);
     assert(sum.wins + sum.losses == 500);
     assert(sum.final_level == 50);
-    assert(sum.total_frames_simulated > 200000); // Hundreds of thousands of 60 FPS frames simulated
+    assert(sum.total_frames_simulated > 200000);
     assert(sum.total_hits_landed > 2000);
     assert(sum.total_grabs_landed > 0);
     assert(sum.total_ledge_recoveries > 0);
@@ -331,7 +360,7 @@ void TestTrainingSimulation500Games60Fps() {
     assert(bin.VerifyRetailKeyHash());
     assert(bin.VerifyNtag215PwdPack());
     assert(bin.VerifySwitchCompatibility());
-    assert(!bin.GetLearningEnabled()); // Frozen after training
+    assert(!bin.GetLearningEnabled());
 #ifdef _WIN32
     assert(sum.executed_on_gpu);
 #endif
@@ -341,14 +370,16 @@ void TestTrainingSimulation500Games60Fps() {
     assert(trained_bp.attack_out_cliff > 0.55f);
     assert(trained_bp.meteor_master > 0.55f);
 
-    const std::string tmp_file = "test_trained_amiibo_v25.bin";
+    const std::string tmp_file = "test_trained_amiibo_v26.bin";
     std::string err;
     bool saved = bin.SaveToFile(tmp_file, &err);
     assert(saved);
+    (void)saved;
 
     ssbu::AmiiboBin reloaded;
     bool loaded = reloaded.LoadFromFile(tmp_file, &err);
     assert(loaded);
+    (void)loaded;
     assert(reloaded.WasLoadedEncrypted());
     assert(reloaded.VerifySwitchCompatibility());
     assert(reloaded.GetDisplayedLevel() == 50);
@@ -366,10 +397,49 @@ void TestTrainingSimulation500Games60Fps() {
               << sum.final_personality << ")\n";
 }
 
+void TestIncineroarRaidBossAndSpiritBenchmark() {
+    ssbu::AmiiboBin incin;
+    incin.InitializeBlankFighter(0x1BD7, 0); // Incineroar (0x1BD7000003860002)
+    assert(incin.GetCharacterId() == 0x1BD7);
+    assert(incin.GetAmiiboId() == 0x1BD7000003860002ULL);
+    incin.SetSpiritType(ssbu::SpiritType::Neutral);
+    incin.SetStats(2400, 2600, false);
+    assert(incin.SetSpiritSlots(140, 15, 0, true)); // Armor Knight (140, 2-slot) + Trade-Off Ability Up (15, 1-slot)
+
+    ssbu::TrainingConfig cfg{};
+    cfg.num_games = 500;
+    cfg.archetype = ssbu::OpponentArchetype::FullRosterGauntlet;
+    cfg.focus = ssbu::TrainingFocus::IncineroarRaidBoss;
+    cfg.compute_preference = ssbu::ComputePreference::GpuFirstAuto;
+    cfg.freeze_learning_after_training = true;
+    cfg.random_seed = 777;
+
+    ssbu::TrainingSummary sum = ssbu::TrainingSimulator::RunTrainingSession(incin, cfg);
+    assert(sum.total_games == 500);
+    assert(sum.final_level == 50);
+    assert(incin.VerifySwitchCompatibility());
+    ssbu::AmiiboBehaviorParams bp = incin.DecodeBehavior();
+    assert(bp.sspecial > 30.0f); // Alolan Whip dominant grounded move
+    assert(bp.uair > 25.0f);     // Endeavor Up-Air juggle chains
+    assert(bp.dair > 18.0f);     // Down-Air landing & meteor
+    assert(bp.just_shield_master > 0.90f);
+    assert(bp.catcher > 0.88f);
+    assert(bp.return_to_cliff > 0.90f);
+
+    auto bench = ssbu::TrainingSimulator::RunIncineroarSpiritBenchmark(100, ssbu::ComputePreference::GpuFirstAuto);
+    assert(bench.size() == 8);
+    assert(bench[0].win_rate_pct > 90.0f);
+
+    std::cout << "[PASS] TestIncineroarRaidBossAndSpiritBenchmark (AlolanWhip: " << bp.sspecial
+              << "%, Uair: " << bp.uair << "%, Dair: " << bp.dair
+              << "%, Parry: " << (bp.just_shield_master * 100.0f)
+              << "%, Loadout #1 Win Rate: " << bench[0].win_rate_pct << "%)\n";
+}
+
 } // namespace
 
 int main() {
-    std::cout << "Running SSBU Amiibo Trainer v2.5 (Switch nn::nfp + SSBU AppData Checksum Verified + 60 FPS GPU Physics) C++20 Unit & Integration Tests...\n";
+    std::cout << "Running SSBU Amiibo Trainer v2.6 (Switch nn::nfp + SSBU AppData Checksum Verified + Incineroar Raid Boss Lab) C++20 Tests...\n";
     TestSpiritCatalogAndRoster();
     TestSwitchNfpCompatibilityAndAutoMii();
     TestBitfieldPackingAndStats();
@@ -377,6 +447,7 @@ int main() {
     TestPersonalityScoringBranches();
     TestGpuFirstComputeEngine();
     TestTrainingSimulation500Games60Fps();
-    std::cout << "All SSBU Amiibo Trainer v2.5 tests passed!\n";
+    TestIncineroarRaidBossAndSpiritBenchmark();
+    std::cout << "All SSBU Amiibo Trainer v2.6 tests passed!\n";
     return 0;
 }
