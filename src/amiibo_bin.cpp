@@ -1,12 +1,12 @@
 #include "amiibo_bin.hpp"
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
-#include <random>
 #include <sstream>
+#include <atomic>
+#include <random>
 #include <unordered_map>
 
 namespace ssbu {
