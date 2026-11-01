@@ -716,7 +716,7 @@ void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
     SetDisplayedLevel(1);
     SetCpuLevel(1);
     SetSpiritType(SpiritType::Neutral);
-    SetStats(0, 0, true);
+    SetStats(0, 0, false);
     SetSpiritSlots(0, 0, 0, false);
 
     const auto* fighter = FindFighterById(char_id);
@@ -1263,15 +1263,9 @@ int16_t AmiiboBin::GetDefenseStat() const {
 }
 
 void AmiiboBin::SetStats(int16_t attack, int16_t defense, bool enforce_legal_cap) {
-    if (enforce_legal_cap) {
-        attack  = std::clamp<int16_t>(attack,  -2000, 5000);
-        defense = std::clamp<int16_t>(defense, -2000, 5000);
-        if (static_cast<int>(attack) + static_cast<int>(defense) > 5000) {
-            int total = static_cast<int>(attack) + static_cast<int>(defense);
-            attack  = static_cast<int16_t>((static_cast<int>(attack) * 5000) / total);
-            defense = static_cast<int16_t>(5000 - attack);
-        }
-    }
+    // Unlimited Attack & Defense Spirit power: write full signed 16-bit values (-32768..32767) directly
+    // without clamping to 5000 or scaling down ATK + DEF
+    (void)enforce_legal_cap;
     uint16_t u_atk = static_cast<uint16_t>(attack);
     uint16_t u_def = static_cast<uint16_t>(defense);
     data_[0x150] = static_cast<uint8_t>(u_atk & 0xFF);
@@ -1343,7 +1337,7 @@ bool AmiiboBin::SetSpiritSlots(uint8_t slot1, uint8_t slot2, uint8_t slot3,
 
 bool AmiiboBin::ApplyPrimarySpiritPreset(const PrimarySpiritPreset& preset) {
     SetSpiritType(preset.type);
-    SetStats(preset.base_attack, preset.base_defense, true);
+    SetStats(preset.base_attack, preset.base_defense, false);
     return true;
 }
 
