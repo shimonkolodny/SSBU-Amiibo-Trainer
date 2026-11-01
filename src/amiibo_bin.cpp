@@ -1,9 +1,11 @@
 #include "amiibo_bin.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <random>
 #include <sstream>
 #include <unordered_map>
 
@@ -223,7 +225,7 @@ static const uint8_t kAesSbox[256] = {
   0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
   0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
   0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
-  0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+  0xe0,0x32,03a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
   0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
   0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
   0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
@@ -535,15 +537,33 @@ bool AmiiboBin::VerifyNtag215PwdPack() const {
 }
 
 void AmiiboBin::EnsureValidNtag215HeaderAndLockBytes() {
-    // 1. Ensure valid NTAG215 UID at 0x1D4..0x1DB (tag[0x000..0x007])
-    if (data_[0x1D4] != 0x04) {
+    // 1. Ensure valid, unique NTAG215 UID at 0x1D4..0x1DB (tag[0x000..0x007])
+    //    Automatically migrate any uninitialized or legacy static 04:A1:B2:D4:E5:F6:77 UID to a fresh unique UID + salt
+    bool is_legacy_static_uid = (data_[0x1D4] == 0x04 && data_[0x1D5] == 0xA1 && data_[0x1D6] == 0xB2 &&
+                                 data_[0x1D8] == 0xD4 && data_[0x1D9] == 0xE5 && data_[0x1DA] == 0xF6 &&
+                                 data_[0x1DB] == 0x77);
+    if (data_[0x1D4] != 0x04 || is_legacy_static_uid) {
+        static std::atomic<uint64_t> s_fallback_seq{1000};
+        uint64_t seq = s_fallback_seq.fetch_add(1);
+        std::random_device rd;
+        std::mt19937_64 rng((static_cast<uint64_t>(rd()) << 32) ^ rd() ^ (seq * 0xBF58476D1CE4E5B9ULL));
+        uint64_t r = rng();
+        uint8_t u1 = static_cast<uint8_t>((r >> 0) & 0xFFu);
+        uint8_t u2 = static_cast<uint8_t>((r >> 8) & 0xFFu);
+        if ((0x04u ^ u1 ^ u2) == 0) u2 ^= 0x5Au;
+        if (u1 == 0xA1 && u2 == 0xB2) u1 ^= 0x3Cu;
         data_[0x1D4] = 0x04;
-        data_[0x1D5] = 0xA1;
-        data_[0x1D6] = 0xB2;
-        data_[0x1D8] = 0xD4;
-        data_[0x1D9] = 0xE5;
-        data_[0x1DA] = 0xF6;
-        data_[0x1DB] = 0x77;
+        data_[0x1D5] = u1;
+        data_[0x1D6] = u2;
+        data_[0x1D8] = static_cast<uint8_t>(((r >> 16) & 0xFFu) | 0x10u);
+        data_[0x1D9] = static_cast<uint8_t>((r >> 24) & 0xFFu);
+        data_[0x1DA] = static_cast<uint8_t>((r >> 32) & 0xFFu);
+        data_[0x1DB] = static_cast<uint8_t>((r >> 40) & 0xFFu);
+        for (size_t i = 0; i < 32; ++i) {
+            if ((i & 7) == 0) r = rng();
+            uint8_t sb = static_cast<uint8_t>((r >> ((i & 7) * 8)) & 0xFFu);
+            data_[0x1E8 + i] = (sb == 0) ? static_cast<uint8_t>(0x37u + i) : sb;
+        }
     }
     // Always enforce ISO/IEC 14443-3 Cascade Tag BCC0 = 0x88 ^ UID0 ^ UID1 ^ UID2 at 0x1D7 (tag[0x003])
     data_[0x1D7] = static_cast<uint8_t>(0x88u ^ data_[0x1D4] ^ data_[0x1D5] ^ data_[0x1D6]);
@@ -618,19 +638,59 @@ void AmiiboBin::EnsureValidNtag215HeaderAndLockBytes() {
     data_[0x21B] = 0x00;
 }
 
+void AmiiboBin::RandomizeUidAndSalt() {
+    static std::atomic<uint64_t> s_uid_counter{1};
+    uint64_t seq = s_uid_counter.fetch_add(1);
+    std::random_device rd;
+    std::mt19937_64 rng((static_cast<uint64_t>(rd()) << 32) ^ rd() ^ (seq * 0x9E3779B97F4A7C15ULL));
+
+    uint64_t r = rng();
+    uint8_t u1 = static_cast<uint8_t>((r >> 0) & 0xFFu);
+    uint8_t u2 = static_cast<uint8_t>((r >> 8) & 0xFFu);
+    // Ensure ISO14443-3A BCC0 != 0x88 and never equals the legacy static Mario UID (04:A1:B2:D4:E5:F6:77)
+    if ((0x04u ^ u1 ^ u2) == 0) u2 ^= 0x5Au;
+    if (u1 == 0xA1 && u2 == 0xB2) u1 ^= 0x3Cu;
+
+    data_[0x1D4] = 0x04;
+    data_[0x1D5] = u1;
+    data_[0x1D6] = u2;
+    data_[0x1D7] = static_cast<uint8_t>(0x88u ^ data_[0x1D4] ^ data_[0x1D5] ^ data_[0x1D6]);
+    data_[0x1D8] = static_cast<uint8_t>(((r >> 16) & 0xFFu) | 0x10u);
+    data_[0x1D9] = static_cast<uint8_t>((r >> 24) & 0xFFu);
+    data_[0x1DA] = static_cast<uint8_t>((r >> 32) & 0xFFu);
+    data_[0x1DB] = static_cast<uint8_t>((r >> 40) & 0xFFu);
+    data_[0x000] = static_cast<uint8_t>(data_[0x1D8] ^ data_[0x1D9] ^ data_[0x1DA] ^ data_[0x1DB]);
+
+    // Generate fresh 32-byte Keygen Salt at 0x1E8..0x207 (tag[0x060..0x07F])
+    for (size_t i = 0; i < 32; ++i) {
+        if ((i & 7) == 0) r = rng();
+        uint8_t sb = static_cast<uint8_t>((r >> ((i & 7) * 8)) & 0xFFu);
+        data_[0x1E8 + i] = (sb == 0) ? static_cast<uint8_t>(0x37u + i) : sb;
+    }
+
+    EnsureValidNtag215HeaderAndLockBytes();
+}
+
+std::string AmiiboBin::GetUidHexString() const {
+    std::ostringstream oss;
+    oss << std::hex << std::uppercase << std::setfill('0')
+        << std::setw(2) << static_cast<int>(data_[0x1D4]) << ":"
+        << std::setw(2) << static_cast<int>(data_[0x1D5]) << ":"
+        << std::setw(2) << static_cast<int>(data_[0x1D6]) << ":"
+        << std::setw(2) << static_cast<int>(data_[0x1D8]) << ":"
+        << std::setw(2) << static_cast<int>(data_[0x1D9]) << ":"
+        << std::setw(2) << static_cast<int>(data_[0x1DA]) << ":"
+        << std::setw(2) << static_cast<int>(data_[0x1DB]);
+    return oss.str();
+}
+
 void AmiiboBin::InitializeBlankFighter(uint16_t char_id, uint8_t skin) {
     data_.assign(kStandardAmiiboSize, 0);
     was_loaded_encrypted_ = false;
     loaded_as_tag_layout_ = false;
 
-    // UID in Internal layout (0x1D4..0x1DB)
-    data_[0x1D4] = 0x04;
-    data_[0x1D5] = 0xA1;
-    data_[0x1D6] = 0xB2;
-    data_[0x1D8] = 0xD4;
-    data_[0x1D9] = 0xE5;
-    data_[0x1DA] = 0xF6;
-    data_[0x1DB] = 0x77;
+    // Generate a unique NTAG215 7-byte UID & 32-byte salt so no two generated Amiibo collide
+    RandomizeUidAndSalt();
 
     // Flags (0x02C = 0x30: bit 4 User Settings/Mii initialized + bit 5 AppData initialized)
     data_[0x02C] = 0x30;
@@ -1082,6 +1142,7 @@ void AmiiboBin::SetCharacterId(uint16_t char_id) {
         // Preserve existing 64-bit ID if it is already a canonical SSBU variant for this exact fighter
         if (!(IsCanonicalSsbuAmiiboId(cur_aid) && FindFighterByAmiiboId(cur_aid) == new_f)) {
             SetAmiiboId(new_f->amiibo_id);
+            RandomizeUidAndSalt();
         }
         if (cur_nick.empty() || (prev_f && cur_nick == std::string(prev_f->name).substr(0, 10))) {
             SetAmiiboNickname(new_f->name);

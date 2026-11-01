@@ -146,11 +146,12 @@ static std::string BuildOverviewReport(const AmiiboBin& bin, const std::string& 
 
     std::ostringstream oss;
     oss << "====================================================================\n";
-    oss << "  SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.5 (SWITCH-READY)   \n";
+    oss << "  SUPER SMASH BROS. ULTIMATE AMIIBO INSPECTOR v2.6 (SWITCH-READY)   \n";
     oss << "====================================================================\n";
     oss << "File Path          : " << path << "\n";
     oss << "Switch nn::nfp     : " << switch_diag << "\n";
     oss << "Binary Format      : " << bin.GetFormatStatusString() << "\n";
+    oss << "NTAG215 Serial UID : " << bin.GetUidHexString() << " (Unique Per-Tag Serial + Salt)\n";
     oss << "Owner Mii Status   : " << (bin.HasOwnerMii() ? "AUTO-PAIRED & VER3 BITFIELD VALID" : "UNREGISTERED")
         << " (Owner Mii: \"" << bin.GetOwnerMiiName()
         << "\" | Nickname: \"" << bin.GetAmiiboNickname()
@@ -480,7 +481,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             g_app.hwnd_mii_name = CreateWindowA("EDIT", "SwitchMii", WS_VISIBLE | WS_CHILD | WS_BORDER,
                 278, 91, 105, 22, hwnd, reinterpret_cast<HMENU>(ID_EDT_MII_NAME), nullptr, nullptr);
 
-            CreateWindowA("BUTTON", "Auto-Pair Mii", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+            CreateWindowA("BUTTON", "Pair Mii & UID", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                 390, 90, 104, 24, hwnd, reinterpret_cast<HMENU>(ID_BTN_PAIR_MII), nullptr, nullptr);
 
             g_app.hwnd_learning = CreateWindowA("BUTTON", "Enable In-Game AI Learning",
@@ -635,7 +636,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SendMessageA(grp4, WM_SETFONT, reinterpret_cast<WPARAM>(g_app.font_bold), TRUE);
             SendMessageA(g_app.hwnd_report, WM_SETFONT, reinterpret_cast<WPARAM>(g_app.font_mono), TRUE);
 
-            // Populate Fighter Roster (all 89 fighters)
+            // Populate Fighter Roster (all 91 fighters)
             const auto& roster = GetFighterCatalog();
             for (const auto& f : roster) {
                 char fbuf[96];
@@ -671,7 +672,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
             SendMessageA(g_app.hwnd_archetype, CB_SETCURSEL, 0, 0);
 
-            for (int f = 0; f <= 6; ++f) {
+            for (int f = 0; f <= 7; ++f) {
                 const char* fname = TrainingSimulator::FocusToString(static_cast<TrainingFocus>(f));
                 SendMessageA(g_app.hwnd_focus, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(fname));
             }
@@ -696,6 +697,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 char nick_buf[32] = {0}, mii_buf[32] = {0};
                 GetWindowTextA(g_app.hwnd_nickname, nick_buf, sizeof(nick_buf));
                 GetWindowTextA(g_app.hwnd_mii_name, mii_buf, sizeof(mii_buf));
+                g_app.bin.RandomizeUidAndSalt();
                 g_app.bin.AutoPairOwnerMii(
                     mii_buf[0] ? mii_buf : "SwitchMii",
                     nick_buf[0] ? nick_buf : "");
@@ -711,6 +713,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     std::snprintf(dbuf, sizeof(dbuf), "%d", static_cast<int>(primaries[idx].base_defense));
                     SetWindowTextA(g_app.hwnd_atk, abuf);
                     SetWindowTextA(g_app.hwnd_def, dbuf);
+                }
+            } else if (id == ID_CMB_FOCUS && code == CBN_SELCHANGE) {
+                LRESULT foc_idx = SendMessageA(g_app.hwnd_focus, CB_GETCURSEL, 0, 0);
+                if (foc_idx != CB_ERR && static_cast<TrainingFocus>(foc_idx) == TrainingFocus::IncineroarRaidBoss) {
+                    if (g_app.bin.GetCharacterId() == 0x0000) {
+                        g_app.bin.SetCharacterId(0x1BD7);
+                        SyncControlsFromBin();
+                    }
                 }
             } else if ((id == ID_CMB_SUPPORT_1 || id == ID_CMB_SUPPORT_2 || id == ID_CMB_SUPPORT_3) && code == CBN_SELCHANGE) {
                 UpdateSlotMeterLabel();
@@ -826,6 +836,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SyncControlsFromBin();
                 SetWindowTextA(g_app.hwnd_status, "Applied manual AI behavior fine-tuning overrides and recomputed personality.");
             } else if (id == ID_BTN_TRAIN) {
+                LRESULT foc_pre = SendMessageA(g_app.hwnd_focus, CB_GETCURSEL, 0, 0);
+                if (foc_pre != CB_ERR && static_cast<TrainingFocus>(foc_pre) == TrainingFocus::IncineroarRaidBoss &&
+                    SendMessageA(g_app.hwnd_fighter, CB_GETCURSEL, 0, 0) == 0) {
+                    g_app.bin.SetCharacterId(0x1BD7);
+                    SyncControlsFromBin();
+                }
                 ApplySelectedFighterAndSpirits(hwnd);
                 char gbuf[32] = {0};
                 GetWindowTextA(g_app.hwnd_games, gbuf, sizeof(gbuf));
@@ -920,8 +936,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ofn.nMaxFile = MAX_PATH;
                 ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
                 if (GetSaveFileNameA(&ofn)) {
+                    // Always assign a fresh, unique NTAG215 7-byte UID + 32-byte salt on export so the Switch never sees duplicate tags
+                    g_app.bin.RandomizeUidAndSalt();
                     std::string err;
                     if (g_app.bin.SaveToFile(filename, &err)) {
+                        SyncControlsFromBin();
+                        g_app.current_path = filename;
                         std::string diag;
                         g_app.bin.VerifySwitchCompatibility(&diag);
                         std::string msg = std::string("Saved Switch-ready 540-byte NTAG215 Amiibo .bin (") +
@@ -958,7 +978,7 @@ int RunWin32Gui(HINSTANCE hInstance, int nCmdShow) {
 
     HWND hwnd = CreateWindowExA(
         0, CLASS_NAME,
-        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.5 (Switch-Verified + 60 FPS GPU Sim)",
+        "Super Smash Bros. Ultimate - Amiibo Trainer & Spirit Studio v2.6 (Switch-Verified + 60 FPS GPU Sim)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 1075, 765,
         nullptr, nullptr, hInstance, nullptr);
